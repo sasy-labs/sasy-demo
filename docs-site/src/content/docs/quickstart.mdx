@@ -5,6 +5,8 @@ description: Get up and running in 5 minutes.
 
 import { Steps, Tabs, TabItem, Aside } from '@astrojs/starlight/components';
 
+## Setup
+
 <Steps>
 
 1. **Clone and install**
@@ -30,83 +32,35 @@ import { Steps, Tabs, TabItem, Aside } from '@astrojs/starlight/components';
 
    Your SASY API key is provided separately.
 
-3. **Run the demo**
-
-   The repo includes a pre-built Datalog policy
-   (`policy.dl`) ready to use. Run it:
-
-   <Tabs>
-     <TabItem label="All scenarios">
-       ```bash
-       make demo
-       ```
-     </TabItem>
-     <TabItem label="Interactive">
-       ```bash
-       make demo-step
-       ```
-       Press Enter between each stage to see what's
-       happening step by step.
-     </TabItem>
-     <TabItem label="Single scenario">
-       ```bash
-       make scenario-1
-       ```
-     </TabItem>
-   </Tabs>
-
-   This uploads `policy.dl` to the SASY policy
-   engine and runs 9 agent scenarios against it.
-
 </Steps>
 
-## Translate Your Own Policy
+## Run the Demo
 
-Once you've seen the demo, try translating a policy
-from English yourself.
+The repo includes a pre-built Datalog policy
+(`policy.dl`). Run the demo to see enforcement
+in action:
 
-<Steps>
+<Tabs>
+  <TabItem label="All scenarios">
+    ```bash
+    make demo
+    ```
+  </TabItem>
+  <TabItem label="Interactive">
+    ```bash
+    make demo-step
+    ```
+    Press Enter between each stage.
+  </TabItem>
+  <TabItem label="Single scenario">
+    ```bash
+    make scenario-1
+    ```
+  </TabItem>
+</Tabs>
 
-1. **Edit the English policy**
-
-   Open `policy_english.md` and modify the rules
-   (or write your own).
-
-2. **Translate**
-
-   ```bash
-   make translate
-   ```
-
-   This sends the English to the SASY translation
-   service and takes ~5-10 minutes. It produces
-   two files in the repo root:
-
-   - `policy_compiled.dl` — the generated Datalog
-   - `truth_table.tsv` — every test scenario
-
-3. **Run the demo with your translated policy**
-
-   ```bash
-   make demo-compiled
-   ```
-
-   This uploads `policy_compiled.dl` (instead of
-   the pre-built `policy.dl`) and runs all 9
-   scenarios against your translated policy.
-
-</Steps>
-
-<Aside>
-  See [Translate a Policy](/translate/) for details
-  on the confidence report and verification artifacts.
-</Aside>
-
-## What You'll See
-
-When you run a scenario, you'll see a narrated
-walkthrough of the agent handling a customer
-request:
+This uploads `policy.dl` to the SASY policy engine
+and runs 9 agent scenarios. You'll see:
 
 ```
 [Customer] Hi, I need to cancel reservation RKLA42.
@@ -125,8 +79,141 @@ request:
   cancelled because you don't have travel insurance.
 ```
 
-Each step shows:
-- **→** the tool call the agent is making
-- **[SASY]** the policy engine checking the call
-- **✓ AUTHORIZED** or **✗ DENIED** with the reason
-- **[Agent]** how the agent responds to the customer
+## Translate a Policy
+
+Write your policy in English and translate it to
+Datalog:
+
+<Tabs>
+  <TabItem label="SDK">
+    ```python
+    from sasy.policy import write_policy
+
+    with open("policy_english.md") as f:
+        english = f.read()
+
+    result = write_policy(english=english)
+    result.print_summary()
+    result.save_datalog("policy_compiled.dl")
+    ```
+  </TabItem>
+  <TabItem label="Makefile">
+    ```bash
+    make translate
+    ```
+  </TabItem>
+</Tabs>
+
+Translation takes ~5-10 minutes. It produces two
+files in the repo root:
+
+- `policy_compiled.dl` — the generated Datalog
+- `truth_table.tsv` — every test scenario
+
+Then run the demo with your translated policy:
+
+```bash
+make demo-compiled
+```
+
+See [Translate a Policy](/translate/) for the full
+confidence report and verification details.
+
+## Enforce a Policy
+
+Here's how enforcement works in your own code.
+
+### 1. Configure
+
+```python
+import sasy
+from sasy.auth import APIKeyAuthHook
+
+sasy.configure(
+    auth_hook=APIKeyAuthHook(api_key="demo-key-...")
+)
+```
+
+Or just set `SASY_API_KEY` in `.env` — the SDK
+reads it automatically.
+
+### 2. Upload
+
+<Tabs>
+  <TabItem label="SDK">
+    ```python
+    from sasy.policy import upload_policy
+
+    with open("policy.dl") as f:
+        datalog = f.read()
+
+    resp = upload_policy(
+        policy_source=datalog,
+        hot_reload=True,
+    )
+    print("Uploaded!" if resp.accepted else resp.error_output)
+    ```
+  </TabItem>
+  <TabItem label="Makefile">
+    ```bash
+    make upload            # uploads policy.dl
+    make upload-compiled   # uploads policy_compiled.dl
+    ```
+  </TabItem>
+</Tabs>
+
+### 3. Check tool calls
+
+Before executing any tool, check with the policy
+engine:
+
+```python
+from sasy.reference_monitor import check_tool_call
+
+auth = check_tool_call(
+    fn_name="cancel_reservation",
+    args='{"reservation_id": "RKLA42"}',
+    input_node_ids=event_ids,
+)
+
+if auth.authorized:
+    # Execute the tool
+    result = cancel_reservation(reservation_id="RKLA42")
+else:
+    # Policy denied — show the reason
+    print(f"Denied: {auth.denial_reasons}")
+    print(f"Suggestions: {auth.suggestions}")
+```
+
+Every tool call your agent makes goes through
+this check. The policy engine evaluates it against
+the loaded Datalog and returns AUTHORIZED or
+DENIED with a human-readable reason.
+
+<Aside>
+  The demo code in `src/customer_demo/agent.py`
+  shows the full integration — how tool calls are
+  recorded in the dependency graph and checked
+  against the policy.
+</Aside>
+
+### 4. Instrument (optional)
+
+For automatic instrumentation of HTTP and agent
+frameworks:
+
+```python
+import sasy
+
+sasy.configure(
+    auth_hook=APIKeyAuthHook(api_key="demo-key-...")
+)
+sasy.instrument()  # patches HTTP, Langroid, etc.
+```
+
+This wraps HTTP requests and agent tool calls
+so every action is automatically recorded and
+checked — no manual `check_tool_call` needed.
+
+See [How Enforcement Works](/demo/enforcement/)
+for the full flow diagram.
