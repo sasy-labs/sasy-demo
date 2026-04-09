@@ -1,6 +1,6 @@
 # SASY Policy Enforcement Demo
 
-Translate English security policies into enforced Datalog for LLM agents.
+Policy translation and enforcement for LLM agents — write rules in English, enforce them on every tool call.
 
 **[Documentation](https://sasy-demo.pages.dev)** |
 **[Quick Start](https://sasy-demo.pages.dev/quickstart/)**
