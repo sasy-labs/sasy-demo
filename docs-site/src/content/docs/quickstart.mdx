@@ -69,18 +69,18 @@ When you run a scenario, you'll see a narrated
 walkthrough of the agent handling a customer
 request:
 
-```ansi
-[32m[Customer][0m Hi, I need to cancel reservation RKLA42.
+```
+[Customer] Hi, I need to cancel reservation RKLA42.
 
-  [33m→ get_reservation_details(reservation_id=RKLA42)[0m
-  [2m  [SASY] Consulting policy engine...[0m
-  [32;1m  [SASY] ✓ AUTHORIZED: get_reservation_details[0m
+  → get_reservation_details(reservation_id=RKLA42)
+    [SASY] Consulting policy engine...
+    [SASY] ✓ AUTHORIZED: get_reservation_details
 
-  [33m→ cancel_reservation(reservation_id=RKLA42)[0m
-  [2m  [SASY] Consulting policy engine...[0m
-  [31;1m  [SASY] ✗ DENIED: cancel_reservation[0m
-  [31m  Reason: No insurance, not a gold member[0m
-  [31m  → Consider adding travel insurance[0m
+  → cancel_reservation(reservation_id=RKLA42)
+    [SASY] Consulting policy engine...
+    [SASY] ✗ DENIED: cancel_reservation
+    Reason: No insurance, not a gold member
+    → Consider adding travel insurance
 
 [36m[Agent][0m I'm sorry, your reservation cannot be
   cancelled because you don't have travel insurance.
