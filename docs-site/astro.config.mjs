@@ -10,7 +10,7 @@ export default defineConfig({
         {
           icon: 'github',
           label: 'GitHub',
-          href: 'https://github.com/sasy-labs/sasy-customer-demo',
+          href: 'https://github.com/sasy-labs/sasy-demo',
         },
       ],
       sidebar: [
