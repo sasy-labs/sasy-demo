@@ -1,5 +1,7 @@
 # SASY Policy Enforcement Demo
 
+> **[Documentation](https://sasy-demo.pages.dev)**
+
 Interactive demo showing how Datalog policies enforce
 rules on airline agent tool calls in real time.
 
