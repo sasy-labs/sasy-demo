@@ -1,0 +1,228 @@
+/*
+    Common Policy Code (Souffle)
+
+    Users should define logic for when IsAuthorized(idx) and Unauthorized(idx)
+    should hold. Unauthorized always overrides, but any approved request requires
+    BOTH explicit authorization via IsAuthorized and no denial from Unauthorized.
+
+    For Unauthorized rules, prefer writing DenialReason(idx, reason, suggestion)
+    instead — common_policy derives Unauthorized(idx) from DenialReason automatically.
+    Annotated Unauthorized rules are rewritten to DenialReason by sugar.py.
+
+    Each index idx maps to an Action as defined below. Utilities and common
+    relations are provided for dependencies between messages, requesting
+    entity and role(s), the ID of the messages, if any, which directly produced
+    the action request, and for messages contents and metadata.
+*/
+
+/* ── Type Definitions ─────────────────────────────────────────────── */
+
+.type AgentRole = Assistant {} | SystemRole {} | UserRole {} | AgentType {}
+
+.type Message = [
+    contents: symbol,
+    tools_json: symbol,     // JSON-encoded: [["fn_name","args"], ...]
+    agent: symbol,
+    agent_role: AgentRole,
+    entity: symbol          // empty string = no entity
+]
+
+.type Action = SendAttempt { message: Message }
+             | CallTool { fn_name: symbol, args: symbol }
+             | HTTPRequest { url: symbol, body: symbol, headers_json: symbol }
+
+/* ── Input Relations ──────────────────────────────────────────────── */
+
+// Edges of the dependency graph
+// Edge(source, dest) means "dest depends on source"
+.decl Edge(source_id: symbol, dest_id: symbol)
+.input Edge
+
+// Maps from message IDs to details
+.decl SentMessage(id: symbol, message: Message)
+.input SentMessage
+
+// The message is the return value of calling a tool
+.decl ToolResult(id: symbol, fn_name: symbol, args: symbol)
+.input ToolResult
+
+// The ID of the node triggering the action
+.decl Current(id: symbol)
+.input Current
+
+// The actions that the current request comprises
+.decl Actions(idx: unsigned, action: Action)
+.input Actions
+
+// The pre-authenticated entity triggering the action
+.decl AuthenticatedEntity(entity: symbol)
+.input AuthenticatedEntity
+
+// Roles associated with the authenticated entity (from JWT claims)
+.decl EntityRole(entity: symbol, role: symbol)
+.input EntityRole
+
+// Tenant identifier for multi-tenant policy rules
+.decl TenantId(id: symbol)
+.input TenantId
+
+/* ── Output Relations ─────────────────────────────────────────────── */
+
+// Backward reachability from Current node(s) only.
+// CurrentDepends(source) means "some Current node transitively depends on source"
+.decl CurrentDepends(source_id: symbol)
+.output CurrentDepends
+
+// Main authorization output
+.decl Authorized(idx: unsigned)
+.output Authorized
+
+// Allowlist and denylist (index-based)
+.decl IsAuthorized(idx: unsigned)
+.output IsAuthorized
+
+.decl Unauthorized(idx: unsigned)
+.output Unauthorized
+
+// Denial reasons — correct by construction (only fired rules produce tuples).
+// sugar.py rewrites annotated Unauthorized rules into DenialReason rules.
+// Policies may also write DenialReason directly.
+.decl DenialReason(idx: unsigned, reason: symbol, suggestion: symbol)
+.output DenialReason
+
+// Any DenialReason implies Unauthorized
+Unauthorized(idx) :- DenialReason(idx, _, _).
+
+// Sentinel: an authenticated entity exists
+.decl HasAuthenticatedEntity()
+.output HasAuthenticatedEntity
+
+// Entity role check
+.decl HasRole(role: symbol)
+.output HasRole
+
+// Transform application
+.decl ApplyTransform(idx: unsigned, transform_id: symbol)
+.output ApplyTransform
+
+// Denial behavior
+.decl DenyUnauthorized(idx: unsigned)
+.output DenyUnauthorized
+
+.decl AllowPassthrough(idx: unsigned)
+.output AllowPassthrough
+
+/* ── C++ Functors ─────────────────────────────────────────────────── */
+
+// String operations
+.functor str_contains(s: symbol, sub: symbol): unsigned stateful
+.functor str_starts_with(s: symbol, prefix: symbol): unsigned stateful
+.functor str_to_lower(s: symbol): symbol stateful
+
+// JSON operations
+.functor json_get_str(json: symbol, field: symbol): symbol stateful
+.functor json_get_int(json: symbol, field: symbol): number stateful
+.functor json_has_field(json: symbol, field: symbol): unsigned stateful
+
+// URL operations
+.functor url_host(url: symbol): symbol stateful
+
+// LLM semantic check (memoized)
+.functor llm_check_fn(prompt: symbol, context: symbol): unsigned stateful
+
+/* ── Utility Relations ────────────────────────────────────────────── */
+
+// Helper: check if an action queries a specific URL host
+.decl QueriesHost(action: Action, host: symbol)
+QueriesHost(a, host) :-
+    Actions(_, a),
+    a = $HTTPRequest(url, _, _),
+    @url_host(url) = host,
+    host != "".
+
+// Helper: check if an action is a specific tool call
+.decl IsTool(action: Action, fn_name: symbol)
+IsTool(a, name) :-
+    Actions(_, a),
+    a = $CallTool(name, _).
+
+// Helper: check if action is any tool call
+.decl IsToolCall(action: Action)
+IsToolCall(a) :-
+    Actions(_, a),
+    a = $CallTool(_, _).
+
+// Note: For tool argument extraction, use functors directly in rules:
+//   a = $CallTool(_, args), val = @json_get_str(args, "field_name"), val != ""
+// Generic ToolArgStr/ToolArgInt relations cannot be defined without
+// a bound set of field names (Soufflé requires grounded variables).
+
+/* ── Graph Dependency Propagation ─────────────────────────────────── */
+
+// CurrentDepends(source) — backward reachability from Current nodes
+CurrentDepends(src) :- Current(id), Edge(src, id).
+CurrentDepends(src) :- CurrentDepends(mid), Edge(src, mid).
+
+// ── Tool Result Field Extraction ─────────────────────────
+//
+// Use ToolResultField to check attributes returned by tool
+// calls earlier in the conversation. This is the primary
+// mechanism for attribute-based policies — when the policy
+// depends on data that a tool returned (e.g., a user's
+// membership level, an order's status, a document's
+// classification), use ToolResultField to access it.
+//
+// Usage in policy files:
+//
+//   1. Declare which JSON fields you need:
+//      ToolResultFieldName("status").
+//      ToolResultFieldName("role").
+//
+//   2. Use ToolResultField in rules:
+//      // Deny if the order status is "shipped"
+//      Unauthorized(idx) :-
+//          Actions(idx, a),
+//          IsTool(a, "cancel_order"),
+//          ToolResultField("get_order", "status", "shipped").
+//
+//      // Deny if role is NOT "admin"
+//      Unauthorized(idx) :-
+//          Actions(idx, a),
+//          IsTool(a, "delete_user"),
+//          !ToolResultField("get_user", "role", "admin").
+//
+//   3. Guard rules — deny if the prerequisite lookup has
+//      not happened yet (the field is unknown):
+//      Unauthorized(idx) :-
+//          Actions(idx, a),
+//          IsTool(a, "cancel_order"),
+//          !ToolResultField("get_order", "status", _).
+//
+// The relation is scoped to the current conversation's
+// dependency graph via CurrentDepends, so different
+// conversations never mix.
+//
+.decl ToolResultFieldName(name: symbol)
+.decl ToolResultField(tool: symbol, field: symbol, value: symbol)
+.output ToolResultField
+ToolResultField(tool, field, value) :-
+    CurrentDepends(mid),
+    ToolResult(mid, tool, _),
+    SentMessage(mid, msg),
+    ToolResultFieldName(field),
+    value = @json_get_str(msg.contents, field),
+    value != "".
+
+/* ── Core Authorization Logic ─────────────────────────────────────── */
+
+HasAuthenticatedEntity() :- AuthenticatedEntity(_).
+HasRole(role) :- AuthenticatedEntity(entity), EntityRole(entity, role).
+
+// An action is authorized if:
+// 1. There's an authenticated entity
+// 2. The action is on the allowlist (IsAuthorized)
+// 3. The action is NOT on the denylist (Unauthorized)
+Authorized(idx) :-
+    HasAuthenticatedEntity(),
+    IsAuthorized(idx),
+    !Unauthorized(idx).

@@ -1,0 +1,119 @@
+---
+title: How Enforcement Works
+description: What happens when your agent makes a tool call.
+---
+
+import { Steps, Aside } from '@astrojs/starlight/components';
+
+## The Flow
+
+Every tool call your LLM agent makes goes through
+the SASY policy engine before execution.
+
+<Steps>
+
+1. **Customer sends a message**
+
+   *"Hi, I need to cancel my reservation RKLA42."*
+
+2. **Agent reasons and calls a tool**
+
+   The agent decides to look up the reservation:
+   `get_reservation_details(reservation_id="RKLA42")`
+
+3. **SASY checks the policy**
+
+   Before the tool executes, SASY evaluates the
+   call against the loaded Datalog policy. It
+   checks:
+
+   - Is this tool on the allowlist?
+   - Are there any `Unauthorized` rules that match?
+   - Has the required prerequisite data been
+     looked up?
+
+4. **Decision: AUTHORIZED or DENIED**
+
+   - **AUTHORIZED** — the tool executes normally.
+     The agent sees the result.
+   - **DENIED** — the tool does NOT execute.
+     The agent sees the denial message and
+     suggestion instead.
+
+5. **Agent responds to the customer**
+
+   If denied, the agent explains why and suggests
+   alternatives — using the `@deny_message` and
+   `@suggestion` from the policy rules.
+
+</Steps>
+
+## What the Agent Sees
+
+### On AUTHORIZED:
+
+The tool runs and returns its normal result. The
+agent doesn't know SASY was involved.
+
+### On DENIED:
+
+The agent receives a structured denial:
+
+```json
+{
+  "authorized": false,
+  "reasons": [
+    "Cannot cancel without insurance unless
+     you are a gold member"
+  ],
+  "suggestions": [
+    "Consider adding travel insurance"
+  ]
+}
+```
+
+The agent can use these to craft a helpful response.
+
+## Prerequisite Guards
+
+Some policy rules depend on data that must be
+looked up first. For example, the cancellation
+policy checks `insurance` and `membership` — but
+these fields only exist after
+`get_reservation_details` is called.
+
+**Guard rules** enforce this ordering:
+
+```
+Agent: cancel_reservation(RKLA42)
+SASY:  ✗ DENIED — look up reservation details first
+Agent: get_reservation_details(RKLA42)
+SASY:  ✓ AUTHORIZED
+Agent: cancel_reservation(RKLA42)
+SASY:  ✓ AUTHORIZED (insurance=yes)
+```
+
+The agent naturally retries after the lookup,
+and the second attempt succeeds because the
+required data is now available.
+
+<Aside type="tip">
+  Guards prevent the agent from making decisions
+  without sufficient context. They're generated
+  automatically when the policy depends on tool
+  result fields.
+</Aside>
+
+## Observability
+
+Every tool call, policy decision, and tool result
+is recorded in SASY's message dependency graph.
+You can query it to understand what happened:
+
+- What tools did the agent call?
+- Which calls were authorized vs. denied?
+- What data influenced the policy decision?
+- Did the agent follow the expected sequence?
+
+This gives you full audit trail visibility over
+your agent's behavior.

@@ -1,0 +1,130 @@
+---
+title: Translate a Policy
+description: Turn an English security policy into verified Datalog.
+---
+
+import { Steps, Tabs, TabItem, Code, Aside } from '@astrojs/starlight/components';
+
+## Install the SDK
+
+```bash
+pip install sasy
+```
+
+## Write Your English Policy
+
+Create `policy_english.md` describing your authorization
+rules in plain language:
+
+```markdown
+# Airline Booking Policy
+
+## Default behavior
+- All actions are authorized by default
+
+## Cancellation policy
+- Gold members can cancel any reservation,
+  regardless of insurance status
+- Silver and regular members can only cancel
+  if the reservation has travel insurance
+
+## Flight modification policy
+- Economy reservations can be modified by any member
+- Basic economy reservations can only be modified
+  by silver or gold members
+```
+
+## Translate It
+
+<Tabs>
+  <TabItem label="Python SDK">
+    ```python
+    from sasy.policy import write_policy
+
+    with open("policy_english.md") as f:
+        english = f.read()
+
+    result = write_policy(
+        english=english,
+        on_progress=lambda stage, elapsed: print(
+            f"  {stage} ({elapsed:.0f}s)"
+        ),
+    )
+
+    result.print_summary()
+    result.save_datalog("policy_compiled.dl")
+    result.save_truth_table("truth_table.tsv")
+    ```
+  </TabItem>
+  <TabItem label="Makefile">
+    ```bash
+    make translate
+    ```
+  </TabItem>
+</Tabs>
+
+<Aside>
+  Translation takes 5-10 minutes. The SDK polls
+  automatically and shows progress.
+</Aside>
+
+## What You Get Back
+
+| Artifact | Access | Description |
+|----------|--------|-------------|
+| Datalog policy | `result.datalog` | Generated Souffl&eacute; rules |
+| Structured spec | `result.structured_spec` | Numbered clauses (C1, C2, ...) |
+| Truth table | `result.truth_table_tsv` | Every test scenario + decision |
+| Verification | `result.verification` | Assertion counts, checks, audit |
+
+Save artifacts to files:
+
+```python
+result.save_datalog("policy_compiled.dl")
+result.save_truth_table("truth_table.tsv")
+```
+
+## Upload and Enforce
+
+```python
+from sasy.policy import upload_policy
+
+with open("policy_compiled.dl") as f:
+    datalog = f.read()
+
+resp = upload_policy(
+    policy_source=datalog,
+    hot_reload=True,
+)
+print("Uploaded!" if resp.accepted else resp.error_output)
+```
+
+Or:
+
+```bash
+make upload-compiled
+```
+
+The policy is now live. Every tool call is checked
+against it in real time.
+
+## Compare Variants
+
+Test whether different phrasings produce the same
+policy:
+
+```python
+from sasy.policy import write_policies
+
+results = write_policies(
+    [variant_a, variant_b],
+)
+
+for i, r in enumerate(results):
+    print(f"\nVariant {i+1}:")
+    r.print_summary()
+```
+
+If both variants produce the same truth table shape
+(same ALLOW/DENY/GUARD_DENY counts), the
+translation is robust to phrasing differences.

@@ -1,0 +1,85 @@
+---
+title: Quick Start
+description: Get up and running in 5 minutes.
+---
+
+import { Steps, Tabs, TabItem, Code } from '@astrojs/starlight/components';
+
+<Steps>
+
+1. **Install dependencies**
+
+   ```bash
+   make setup
+   ```
+
+2. **Configure your keys**
+
+   ```bash
+   cp .env.example .env
+   ```
+
+   Edit `.env` and add your keys:
+
+   ```bash
+   OPENAI_API_KEY=sk-...
+   SASY_API_KEY=demo-key-your-key-here
+   ```
+
+   Your SASY API key is provided separately.
+
+3. **Run the demo**
+
+   <Tabs>
+     <TabItem label="All scenarios">
+       ```bash
+       make demo
+       ```
+     </TabItem>
+     <TabItem label="Interactive">
+       ```bash
+       make demo-step
+       ```
+       Press Enter between each stage to see what's
+       happening step by step.
+     </TabItem>
+     <TabItem label="Single scenario">
+       ```bash
+       make scenario-1
+       ```
+     </TabItem>
+   </Tabs>
+
+4. **Translate your own policy**
+
+   ```bash
+   make translate
+   ```
+
+   This takes ~5-10 minutes. See
+   [Translate a Policy](/translate/) for details.
+
+</Steps>
+
+## What You'll See
+
+When you run a scenario, you'll see a narrated
+walkthrough of the agent handling a customer
+request:
+
+```ansi
+[32m[Customer][0m Hi, I need to cancel reservation RKLA42.
+
+  [33m→ get_reservation_details(reservation_id=RKLA42)[0m
+  [2m  [SASY] Consulting policy engine...[0m
+  [32;1m  [SASY] ✓ AUTHORIZED: get_reservation_details[0m
+
+  [33m→ cancel_reservation(reservation_id=RKLA42)[0m
+  [2m  [SASY] Consulting policy engine...[0m
+  [31;1m  [SASY] ✗ DENIED: cancel_reservation[0m
+  [31m  Reason: No insurance, not a gold member[0m
+  [31m  → Consider adding travel insurance[0m
+
+[36m[Agent][0m I'm sorry, your reservation cannot be
+  cancelled because you don't have travel insurance.
+```

@@ -1,0 +1,122 @@
+---
+title: Confidence Report
+description: How to verify the translation is correct.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+When you translate a policy with `write_policy()`,
+the result includes a verification report. Here's
+how to read it.
+
+## The Summary
+
+```python
+result.print_summary()
+```
+
+```
+Policy Compilation Result
+========================================
+Status:       SUCCESS (336s)
+
+Structured Spec
+  9 clauses (C1-C9)
+
+Verification
+  Truth table:        25 scenarios
+    11 ALLOW | 3 DENY | 11 GUARD_DENY
+  Assertions:         25/25 passed
+  Independent checks: 3/3 passed
+  Round-trip audit:   PASS
+```
+
+## What Each Number Means
+
+### Truth Table (25 scenarios)
+
+Every combination of membership tier, insurance
+status, and cabin class was tested. Each row
+shows what the policy decides for that scenario.
+
+- **ALLOW** — the action is authorized
+- **DENY** — the action is explicitly blocked
+  (with a reason)
+- **GUARD_DENY** — the policy can't decide because
+  required data hasn't been looked up yet
+
+<Aside>
+  The truth table is saved as a TSV file. Open it in
+  a spreadsheet to review every scenario:
+  `result.save_truth_table("truth_table.tsv")`
+</Aside>
+
+### Assertions (25/25 passed)
+
+The generated Datalog was uploaded to the live
+SASY policy engine and evaluated against every
+truth table row. **25/25 means the Datalog
+produces the exact same decisions as the
+specification.**
+
+If any assertion fails, it means the Datalog
+translation has a bug — a specific scenario where
+the policy behaves differently than intended.
+
+### Independent Checks (3/3 passed)
+
+Three separate reviewers examined the policy
+specification for correctness:
+
+| Reviewer | What it checks |
+|----------|---------------|
+| **Omission hunter** | Did we miss any requirement from the English? |
+| **Boundary adversary** | Do edge cases (unknown values, missing data) behave correctly? |
+| **Guard auditor** | Are prerequisite lookups properly enforced? |
+
+### Round-Trip Audit (PASS)
+
+The Datalog was read back **without seeing the
+original English**, and the reconstructed policy
+intent was compared against the specification.
+
+**PASS** means nothing was lost in translation —
+every rule in the Datalog maps to a clause in
+the specification, and vice versa.
+
+## Programmatic Access
+
+All verification data is available on the result
+object:
+
+```python
+v = result.verification
+
+# Truth table shape
+v.truth_table.rows       # 25
+v.truth_table.allow      # 11
+v.truth_table.deny       # 3
+v.truth_table.guard_deny # 11
+
+# Assertion results
+v.assertions.total       # 25
+v.assertions.passed      # 25
+v.assertions.mismatches  # 0
+
+# Checks
+v.independent_checks_passed  # 3
+v.independent_checks_total   # 3
+v.round_trip_audit           # "PASS"
+```
+
+## When Something Fails
+
+If a translation produces assertion mismatches,
+the service automatically retries — fixing the
+Datalog and re-evaluating until all assertions
+pass or a timeout is reached.
+
+If independent checks fail, the structured
+specification may need adjustment. Review the
+check results and update the English policy to
+resolve any ambiguities.
