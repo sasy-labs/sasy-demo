@@ -9,7 +9,7 @@ Verifies the full pipeline through sasy.fly.dev:
 
 Run:
     SASY_API_KEY_SUFFIX=<suffix> \
-    pytest examples/customer-demo/tests/test_graph_policy.py -xvs
+    pytest tests/test_graph_policy.py -xvs
 """
 
 import os

@@ -1,4 +1,4 @@
-"""Narrated terminal output for the customer demo.
+"""Narrated terminal output for the demo.
 
 Shows a clean, stage-by-stage view of the agent loop
 with policy enforcement highlighted. Uses raw ANSI
@@ -16,7 +16,7 @@ import textwrap
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from customer_demo.scenarios import Scenario
+    from demo.scenarios import Scenario
 
 # ── Configuration ────────────────────────────────────
 

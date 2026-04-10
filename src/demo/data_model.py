@@ -1,7 +1,7 @@
 """Airline flight database data model.
 
 Standalone Pydantic models for flights, users, and reservations.
-Extracted from tau2 airline domain for customer demo use.
+Extracted from tau2 airline domain.
 """
 
 import json

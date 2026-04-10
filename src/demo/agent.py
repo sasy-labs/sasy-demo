@@ -1,4 +1,4 @@
-"""Core agent loop for the airline customer demo.
+"""Core agent loop for the airline demo.
 
 Uses the OpenAI SDK directly (no litellm) with SASY
 reference-monitor authorization checks on every tool call.
