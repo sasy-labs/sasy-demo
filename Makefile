@@ -1,4 +1,4 @@
-# SASY Customer Demo — Airline Policy Enforcement
+# SASY Demo — Airline Policy Enforcement
 #
 # Prerequisites:
 #   1. pip install sasy   (or: uv pip install sasy)
@@ -45,7 +45,7 @@ translate:
 # Uploads Datalog to the SASY policy engine.
 
 upload:
-	uv run python -m customer_demo.main --upload-only
+	uv run python -m demo.main --upload-only
 
 # Upload the translated (compiled) policy
 upload-compiled:
@@ -60,10 +60,10 @@ upload-compiled:
 # Uploads the hand-written policy.dl first.
 
 demo:
-	uv run python -m customer_demo.main --all
+	uv run python -m demo.main --all
 
 demo-step:
-	STEP_MODE=1 uv run python -m customer_demo.main --all
+	STEP_MODE=1 uv run python -m demo.main --all
 
 # ── Run with compiled (translated) policy ──────────
 # Uploads policy_compiled.dl then runs scenarios.
@@ -71,54 +71,54 @@ demo-step:
 demo-compiled:
 	@cp policy.dl policy.dl.bak 2>/dev/null || true
 	@cp policy_compiled.dl policy.dl
-	uv run python -m customer_demo.main --all
+	uv run python -m demo.main --all
 	@mv policy.dl.bak policy.dl 2>/dev/null || true
 
 demo-compiled-step:
 	@cp policy.dl policy.bak 2>/dev/null || true
 	@cp policy_compiled.dl policy.dl
-	STEP_MODE=1 uv run python -m customer_demo.main --all
+	STEP_MODE=1 uv run python -m demo.main --all
 	@mv policy.dl.bak policy.dl 2>/dev/null || true
 
 # ── Individual Scenarios ───────────────────────────
 
 scenario-1:
-	uv run python -m customer_demo.main --scenario 1
+	uv run python -m demo.main --scenario 1
 
 scenario-2:
-	uv run python -m customer_demo.main --scenario 2
+	uv run python -m demo.main --scenario 2
 
 scenario-3:
-	uv run python -m customer_demo.main --scenario 3
+	uv run python -m demo.main --scenario 3
 
 scenario-4:
-	uv run python -m customer_demo.main --scenario 4
+	uv run python -m demo.main --scenario 4
 
 scenario-5:
-	uv run python -m customer_demo.main --scenario 5
+	uv run python -m demo.main --scenario 5
 
 scenario-6:
-	uv run python -m customer_demo.main --scenario 6
+	uv run python -m demo.main --scenario 6
 
 scenario-7:
-	uv run python -m customer_demo.main --scenario 7
+	uv run python -m demo.main --scenario 7
 
 scenario-8:
-	uv run python -m customer_demo.main --scenario 8
+	uv run python -m demo.main --scenario 8
 
 scenario-9:
-	uv run python -m customer_demo.main --scenario 9
+	uv run python -m demo.main --scenario 9
 
 # ── Individual Scenarios (interactive) ─────────────
 
 scenario-1-step:
-	STEP_MODE=1 uv run python -m customer_demo.main --scenario 1
+	STEP_MODE=1 uv run python -m demo.main --scenario 1
 
 scenario-2-step:
-	STEP_MODE=1 uv run python -m customer_demo.main --scenario 2
+	STEP_MODE=1 uv run python -m demo.main --scenario 2
 
 scenario-3-step:
-	STEP_MODE=1 uv run python -m customer_demo.main --scenario 3
+	STEP_MODE=1 uv run python -m demo.main --scenario 3
 
 # ── Validation ─────────────────────────────────────
 
