@@ -18,7 +18,7 @@ Prerequisites:
   - TLS certs in certs/ directory
 
 Run:
-    pytest examples/customer-demo/tests/test_local_graph_policy.py -xvs
+    pytest tests/test_local_graph_policy.py -xvs
 """
 
 import os

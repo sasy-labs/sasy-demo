@@ -1,4 +1,4 @@
-"""Curated airline scenarios for the customer demo.
+"""Curated airline scenarios for the demo.
 
 Each scenario exercises a specific cell in the policy
 matrix (membership tier × insurance / cabin class).

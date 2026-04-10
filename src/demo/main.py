@@ -1,4 +1,4 @@
-"""Entry point for the SASY airline customer demo.
+"""Entry point for the SASY airline demo.
 
 Uploads a Datalog policy to the SASY cloud service, then
 runs one or more curated scenarios that exercise the
@@ -34,7 +34,7 @@ def _parse_args() -> argparse.Namespace:
         Parsed ``argparse.Namespace``.
     """
     parser = argparse.ArgumentParser(
-        description="SASY airline customer demo",
+        description="SASY airline policy demo",
     )
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -72,7 +72,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
-    """Run the customer demo CLI."""
+    """Run the demo CLI."""
     args = _parse_args()
 
     if args.step:
