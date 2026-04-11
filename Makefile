@@ -50,6 +50,19 @@ upload:
 # Upload the translated (compiled) policy
 upload-compiled:
 	@uv run python -c "\
+	import os; \
+	from pathlib import Path; \
+	from dotenv import load_dotenv; \
+	load_dotenv(Path('.env')); \
+	from sasy.auth.hooks import APIKeyAuthHook; \
+	from sasy.config import configure; \
+	api_key = os.environ.get('SASY_API_KEY', ''); \
+	if not api_key: \
+	    sfx = os.environ.get('SASY_API_KEY_SUFFIX', ''); \
+	    api_key = f'demo-key-{sfx}' if sfx else ''; \
+	sasy_url = os.environ.get('SASY_URL', 'sasy.fly.dev:443'); \
+	configure(url=sasy_url, ca_path='', cert_path='', key_path='', \
+	    auth_hook=APIKeyAuthHook(api_key=api_key)); \
 	from sasy.policy import upload_policy; \
 	dl = open('policy_compiled.dl').read(); \
 	r = upload_policy(policy_source=dl, hot_reload=True); \
