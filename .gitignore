@@ -2,5 +2,6 @@
 __pycache__/
 *.pyc
 .env
+!.env.example
 uv.lock
 *.egg-info/
