@@ -53,3 +53,4 @@ tau2-bench/.venv/
 # Per-run benchmark outputs (results/ is checked in;
 # output/ is local translation/test scratch)
 benchmarks/tau2-airline/output/
+output/

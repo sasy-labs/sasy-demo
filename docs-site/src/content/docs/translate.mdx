@@ -56,7 +56,6 @@ result = translate(
         "User messages have msg.agent = \"LLMAgent\" and msg.agent_role = $UserRole().\n"
         "Use custom C++ functors for content checks, not @llm_check_fn."
     ),
-    model="sonnet",  # or "haiku" / "opus"
     on_progress=lambda stage, elapsed: print(f"  {stage} ({elapsed:.0f}s)"),
 )
 
@@ -78,7 +77,7 @@ This writes `output/airline_policy.dl`, `output/airline_functors.cpp`, and `outp
 | `codebase_paths` | Source directories the agent analyzer should read |
 | `codebase_root` | Path prefix stripped when zipping — becomes the sandbox root |
 | `instructions` | Domain-specific guidance (agent name, functor preference, etc.) |
-| `model` | `haiku` (cheap, weaker), `sonnet` (default), or `opus` |
+| `model` | `haiku` (default), `sonnet`, or `opus` |
 | `focus_paths` | Optional globs to narrow stage-1 analysis |
 
 ### What the service does

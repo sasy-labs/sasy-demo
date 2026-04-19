@@ -7,6 +7,11 @@ import { Tabs, TabItem, Aside, Steps } from '@astrojs/starlight/components';
 
 This page shows the full policy translation
 from English to enforced Datalog, clause by clause.
+The 10-clause policy below is a simplified version
+used by the 9-scenario demo; the full tau2 airline
+reference lives at `tau2-examples/airline/` — see
+the [benchmark](/benchmarks/tau2-airline/) for
+results.
 
 ## Three Representations
 
@@ -292,6 +297,4 @@ policy — with dependency-graph predicates,
 per-`reservation_id` scoping, and custom C++ functors
 for content matching — see
 [`tau2-examples/airline/airline_policy.dl`](https://github.com/sasy-labs/sasy-demo/blob/main/tau2-examples/airline/airline_policy.dl)
-in the repo and the
-[tau2 airline benchmark](/benchmarks/tau2-airline/)
-for its measured performance.
+in the repo.

@@ -1,20 +1,26 @@
 # SASY Demo — Airline Policy Enforcement
 #
 # Prerequisites:
-#   1. pip install sasy   (or: uv pip install sasy)
-#   2. Copy .env.example to .env and fill in your keys
+#   1. Copy .env.example to .env and fill in your keys
+#   2. make setup
 #
-# Quick start:
-#   make setup            # Install dependencies
-#   make translate        # English → Datalog via SDK
-#   make upload           # Upload policy to SASY
+# Quick start (hand-written reference policy):
 #   make demo             # Run all 9 scenarios
 #   make demo-step        # Interactive walkthrough
+#
+# Translate an English policy via the SASY cloud service:
+#   make translate        # primary: agent-aware Datalog translation
+#   make upload-translated
+#   make demo-translated
 
-.PHONY: setup translate upload demo demo-step \
+.PHONY: setup \
+        translate upload-translated demo-translated demo-translated-step \
+        translate-experimental upload-compiled demo-compiled demo-compiled-step \
+        demo demo-step upload \
         scenario-1 scenario-2 scenario-3 \
         scenario-4 scenario-5 scenario-6 \
         scenario-7 scenario-8 scenario-9 \
+        scenario-1-step scenario-2-step scenario-3-step \
         docs docs-build docs-install test
 
 # ── Setup ──────────────────────────────────────────
@@ -24,114 +30,140 @@ setup:
 	@echo "✓ Dependencies installed"
 	@echo "Next: copy .env.example to .env and add your keys"
 
-# ── Policy Translation ─────────────────────────────
-# Translates policy_english.md → policy_compiled.dl
-# via the SASY cloud service. Takes ~5-10 minutes.
-# Results include verification artifacts.
+# ── Primary Policy Translation ─────────────────────
+# Translates policy_english.md + src/demo/ (your agent) → Datalog +
+# C++ functors via the sasy-translate cloud service. Takes ~5–15 min.
+# Writes output/airline_policy.dl, output/airline_functors.cpp,
+# output/agent_summary.md.
+#
+# NOTE: until the new translate() function is on PyPI, this target
+# installs the sasy SDK editable from a sibling ../sasy checkout
+# via uv's --with-editable. Drop the flag once published.
+
+SASY_SDK_SRC := ../sasy/packages/sasy
+UV_RUN_SDK := uv run --with-editable $(SASY_SDK_SRC)
+
+# Silence gRPC's noisy INFO/WARN messages (e.g. "FD from fork parent
+# still in poll list") emitted when agent traffic spawns subprocesses.
+# Demo/scenario recipes export this so the CLI output stays readable.
+export GRPC_VERBOSITY ?= ERROR
 
 translate:
-	@echo "Translating policy_english.md → Datalog ..."
-	@uv run python -c "\
-	from sasy.policy import write_policy; \
+	@echo "Translating policy_english.md + src/demo/ → Datalog ..."
+	@$(UV_RUN_SDK) python -c "\
+	from sasy.policy import translate; \
 	policy = open('policy_english.md').read(); \
-	r = write_policy(policy=policy, poll_interval=15.0, \
+	r = translate(policy, codebase_paths=['src/demo'], codebase_root='.', \
 	    on_progress=lambda s,e: print(f'  {s} ({e:.0f}s)')); \
 	r.print_summary(); \
-	r.save_datalog('policy_compiled.dl'); \
-	r.save_truth_table('truth_table.tsv'); \
-	print(f'\nSaved: policy_compiled.dl, truth_table.tsv')"
+	r.save_all('output/', base_name='airline'); \
+	print('\nSaved output/airline_policy.dl, output/airline_functors.cpp, output/agent_summary.md')"
 
-# ── Policy Upload ──────────────────────────────────
-# Uploads Datalog to the SASY policy engine.
+upload-translated:
+	$(UV_RUN_SDK) python -c "from sasy.policy import upload_policy_file; \
+	r = upload_policy_file('output/airline_policy.dl'); \
+	print('Accepted' if r.accepted else f'Failed: {r.error_output}')"
+
+demo-translated:
+	@cp policy.dl policy.dl.bak 2>/dev/null || true
+	@cp output/airline_policy.dl policy.dl
+	$(UV_RUN_SDK) python -m demo.main --all
+	@mv policy.dl.bak policy.dl 2>/dev/null || true
+
+demo-translated-step:
+	@cp policy.dl policy.dl.bak 2>/dev/null || true
+	@cp output/airline_policy.dl policy.dl
+	STEP_MODE=1 $(UV_RUN_SDK) python -m demo.main --all
+	@mv policy.dl.bak policy.dl 2>/dev/null || true
+
+# ── Policy Upload (hand-written reference) ─────────
 
 upload:
-	uv run python -m demo.main --upload-only
-
-# Upload the translated (compiled) policy
-upload-compiled:
-	@uv run python -c "\
-	import os; \
-	from pathlib import Path; \
-	from dotenv import load_dotenv; \
-	load_dotenv(Path('.env')); \
-	from sasy.auth.hooks import APIKeyAuthHook; \
-	from sasy.config import configure; \
-	api_key = os.environ.get('SASY_API_KEY', ''); \
-	if not api_key: \
-	    sfx = os.environ.get('SASY_API_KEY_SUFFIX', ''); \
-	    api_key = f'demo-key-{sfx}' if sfx else ''; \
-	sasy_url = os.environ.get('SASY_URL', 'sasy.fly.dev:443'); \
-	configure(url=sasy_url, ca_path='', cert_path='', key_path='', \
-	    auth_hook=APIKeyAuthHook(api_key=api_key)); \
-	from sasy.policy import upload_policy; \
-	dl = open('policy_compiled.dl').read(); \
-	r = upload_policy(policy_source=dl, hot_reload=True); \
-	print('Accepted' if r.accepted else f'Failed: {r.error_output}')"
+	$(UV_RUN_SDK) python -m demo.main --upload-only
 
 # ── Demo Scenarios ─────────────────────────────────
 # Run agent scenarios with live policy enforcement.
 # Uploads the hand-written policy.dl first.
 
 demo:
-	uv run python -m demo.main --all
+	$(UV_RUN_SDK) python -m demo.main --all
 
 demo-step:
-	STEP_MODE=1 uv run python -m demo.main --all
+	STEP_MODE=1 $(UV_RUN_SDK) python -m demo.main --all
 
-# ── Run with compiled (translated) policy ──────────
-# Uploads policy_compiled.dl then runs scenarios.
+# ── Individual Scenarios ───────────────────────────
+
+scenario-1:
+	$(UV_RUN_SDK) python -m demo.main --scenario 1
+
+scenario-2:
+	$(UV_RUN_SDK) python -m demo.main --scenario 2
+
+scenario-3:
+	$(UV_RUN_SDK) python -m demo.main --scenario 3
+
+scenario-4:
+	$(UV_RUN_SDK) python -m demo.main --scenario 4
+
+scenario-5:
+	$(UV_RUN_SDK) python -m demo.main --scenario 5
+
+scenario-6:
+	$(UV_RUN_SDK) python -m demo.main --scenario 6
+
+scenario-7:
+	$(UV_RUN_SDK) python -m demo.main --scenario 7
+
+scenario-8:
+	$(UV_RUN_SDK) python -m demo.main --scenario 8
+
+scenario-9:
+	$(UV_RUN_SDK) python -m demo.main --scenario 9
+
+# ── Individual Scenarios (interactive) ─────────────
+
+scenario-1-step:
+	STEP_MODE=1 $(UV_RUN_SDK) python -m demo.main --scenario 1
+
+scenario-2-step:
+	STEP_MODE=1 $(UV_RUN_SDK) python -m demo.main --scenario 2
+
+scenario-3-step:
+	STEP_MODE=1 $(UV_RUN_SDK) python -m demo.main --scenario 3
+
+# ── Experimental translator (write_policy) ─────────
+# Uses sasy.policy.write_policy — a prototype with extended
+# verification (truth table + adversarial checks) but no
+# codebase awareness. See docs-site /policy/confidence.
+
+translate-experimental:
+	@echo "Translating policy_english.md → Datalog (experimental) ..."
+	@uv run python -c "\
+	from sasy.policy import write_policy; \
+	english = open('policy_english.md').read(); \
+	r = write_policy(english=english, poll_interval=15.0, \
+	    on_progress=lambda s,e: print(f'  {s} ({e:.0f}s)')); \
+	r.print_summary(); \
+	r.save_datalog('policy_compiled.dl'); \
+	r.save_truth_table('truth_table.tsv'); \
+	print(f'\nSaved: policy_compiled.dl, truth_table.tsv')"
+
+upload-compiled:
+	@uv run python -c "from sasy.policy import upload_policy_file; \
+	r = upload_policy_file('policy_compiled.dl'); \
+	print('Accepted' if r.accepted else f'Failed: {r.error_output}')"
 
 demo-compiled:
 	@cp policy.dl policy.dl.bak 2>/dev/null || true
 	@cp policy_compiled.dl policy.dl
-	uv run python -m demo.main --all
+	$(UV_RUN_SDK) python -m demo.main --all
 	@mv policy.dl.bak policy.dl 2>/dev/null || true
 
 demo-compiled-step:
 	@cp policy.dl policy.bak 2>/dev/null || true
 	@cp policy_compiled.dl policy.dl
-	STEP_MODE=1 uv run python -m demo.main --all
+	STEP_MODE=1 $(UV_RUN_SDK) python -m demo.main --all
 	@mv policy.dl.bak policy.dl 2>/dev/null || true
-
-# ── Individual Scenarios ───────────────────────────
-
-scenario-1:
-	uv run python -m demo.main --scenario 1
-
-scenario-2:
-	uv run python -m demo.main --scenario 2
-
-scenario-3:
-	uv run python -m demo.main --scenario 3
-
-scenario-4:
-	uv run python -m demo.main --scenario 4
-
-scenario-5:
-	uv run python -m demo.main --scenario 5
-
-scenario-6:
-	uv run python -m demo.main --scenario 6
-
-scenario-7:
-	uv run python -m demo.main --scenario 7
-
-scenario-8:
-	uv run python -m demo.main --scenario 8
-
-scenario-9:
-	uv run python -m demo.main --scenario 9
-
-# ── Individual Scenarios (interactive) ─────────────
-
-scenario-1-step:
-	STEP_MODE=1 uv run python -m demo.main --scenario 1
-
-scenario-2-step:
-	STEP_MODE=1 uv run python -m demo.main --scenario 2
-
-scenario-3-step:
-	STEP_MODE=1 uv run python -m demo.main --scenario 3
 
 # ── Validation ─────────────────────────────────────
 

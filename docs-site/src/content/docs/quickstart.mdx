@@ -114,10 +114,17 @@ Translation takes ~5–15 minutes. Writes
 `output/airline_functors.cpp`, and
 `output/agent_summary.md`.
 
+Upload and run the translated policy against the
+scenarios:
+
+```bash
+make upload-translated    # ships output/airline_policy.dl
+make demo-translated      # runs scenarios against it
+```
+
 See [Translate a Policy](/translate/) for the full
 API and the [tau2 airline benchmark](/benchmarks/tau2-airline/)
-for empirical confidence numbers across translation
-variants.
+for empirical results.
 
 ## Enforce a Policy
 
@@ -125,39 +132,26 @@ Here's how enforcement works in your own code.
 
 ### 1. Configure
 
-```python
-import sasy
-from sasy.auth import APIKeyAuthHook
-
-sasy.configure(
-    auth_hook=APIKeyAuthHook(api_key="demo-key-...")
-)
-```
-
-Or just set `SASY_API_KEY` in `.env` — the SDK
-reads it automatically.
+Set `SASY_API_KEY` (and optionally `SASY_URL`) in
+`.env` — the SDK reads them automatically on first
+use. For programmatic overrides see
+[`sasy.config.configure()`](https://github.com/sasy-labs/sasy-demo/blob/main/src/demo/main.py).
 
 ### 2. Upload
 
 <Tabs>
   <TabItem label="SDK">
     ```python
-    from sasy.policy import upload_policy
+    from sasy.policy import upload_policy_file
 
-    with open("policy.dl") as f:
-        datalog = f.read()
-
-    resp = upload_policy(
-        policy_source=datalog,
-        hot_reload=True,
-    )
+    resp = upload_policy_file("policy.dl")
     print("Uploaded!" if resp.accepted else resp.error_output)
     ```
   </TabItem>
   <TabItem label="Makefile">
     ```bash
-    make upload            # uploads policy.dl
-    make upload-compiled   # uploads policy_compiled.dl
+    make upload              # uploads policy.dl (reference)
+    make upload-translated   # uploads output/airline_policy.dl
     ```
   </TabItem>
 </Tabs>
@@ -200,14 +194,12 @@ DENIED with a human-readable reason.
 ### 4. Instrument (optional)
 
 For automatic instrumentation of HTTP and agent
-frameworks:
+frameworks, one call is enough (auth comes from
+`.env`):
 
 ```python
 import sasy
 
-sasy.configure(
-    auth_hook=APIKeyAuthHook(api_key="demo-key-...")
-)
 sasy.instrument()  # patches HTTP, Langroid, etc.
 ```
 

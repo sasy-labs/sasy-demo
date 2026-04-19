@@ -6,8 +6,8 @@ For each policy in --policies, uploads it to the SASY cloud endpoint
 of airline tasks. Collects the simulation JSON into results/<label>/.
 
 Assumes you're pointed at a running SASY deployment (cloud or local):
-  SASY_URL              default: sasy.fly.dev:443
-  SASY_API_KEY_SUFFIX   required for cloud auth
+  SASY_URL      default: sasy.fly.dev:443
+  SASY_API_KEY  required for cloud auth
 
 Usage:
     # Evaluate the hand-tuned reference policy
@@ -48,25 +48,12 @@ log = logging.getLogger("tau2-runner")
 
 
 def configure_sasy() -> None:
-    """Configure the sasy SDK from env (.env)."""
+    """Load .env so the sasy SDK picks up SASY_URL / SASY_API_KEY(_SUFFIX)."""
     load_dotenv(REPO_ROOT / ".env")
-    from sasy.auth.hooks import APIKeyAuthHook
-    from sasy.config import configure
+    from sasy.config import get_config
 
-    api_key = os.environ.get("SASY_API_KEY", "")
-    if not api_key:
-        sfx = os.environ.get("SASY_API_KEY_SUFFIX", "")
-        api_key = f"demo-key-{sfx}" if sfx else ""
-    sasy_url = os.environ.get("SASY_URL", "sasy.fly.dev:443")
-
-    configure(
-        url=sasy_url,
-        ca_path=None,
-        cert_path=None,
-        key_path=None,
-        auth_hook=APIKeyAuthHook(api_key=api_key),
-    )
-    log.info("sasy configured: url=%s key=%s", sasy_url, "set" if api_key else "none")
+    cfg = get_config()
+    log.info("sasy configured: url=%s auth=%s", cfg.url, type(cfg.auth_hook).__name__)
 
 
 def upload_policy(policy_path: Path, functors_path: Path | None = None) -> None:

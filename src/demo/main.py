@@ -87,41 +87,16 @@ def main() -> None:
         )
         sys.exit(1)
 
-    api_key = os.environ.get("SASY_API_KEY")
-    if not api_key:
-        suffix = os.environ.get("SASY_API_KEY_SUFFIX")
-        if suffix:
-            api_key = f"demo-key-{suffix}"
-        else:
-            print(
-                "ERROR: Set SASY_API_KEY or "
-                "SASY_API_KEY_SUFFIX in your .env "
-                "file.\n"
-                "  SASY_API_KEY_SUFFIX=your-suffix"
-            )
-            sys.exit(1)
+    if not os.environ.get("SASY_API_KEY"):
+        print(
+            "ERROR: SASY_API_KEY is not set.\n"
+            "Add it to your .env file:\n"
+            "  SASY_API_KEY=demo-key-..."
+        )
+        sys.exit(1)
 
-    sasy_url = os.environ.get(
-        "SASY_URL", "sasy.fly.dev:443"
-    )
-
-    # Clear local TLS paths when targeting cloud.
-    if "localhost" not in sasy_url:
-        os.environ.pop("TLS_CA_PATH", None)
-        os.environ.pop("TLS_CERT_PATH", None)
-        os.environ.pop("TLS_KEY_PATH", None)
-
-    # ── Configure SASY ───────────────────────────────
-    from sasy.auth.hooks import APIKeyAuthHook
-    from sasy.config import configure
-
-    configure(
-        url=sasy_url,
-        ca_path="",
-        cert_path="",
-        key_path="",
-        auth_hook=APIKeyAuthHook(api_key=api_key),
-    )
+    # The sasy SDK picks up SASY_URL and SASY_API_KEY
+    # from the env automatically.
 
     # ── Upload policy ────────────────────────────────
     if not args.skip_upload:

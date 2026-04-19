@@ -62,7 +62,9 @@ Translator rows: mean ± std across N independent translations. Baseline rows: s
 See `benchmarks/tau2-airline/` in the repo:
 
 ```bash
-# 1. Translate (N=3 originals + N=3 paraphrases) against the cloud endpoint
+# 1. Translate (N=3 originals + N=3 paraphrases) against the cloud endpoint.
+#    Default model is haiku; add --model opus to match the
+#    translated-policy rows in the table above.
 uv run python benchmarks/tau2-airline/run.py variance --n 3
 
 # 2. Evaluate each translation against tau2
