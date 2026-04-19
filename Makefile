@@ -15,7 +15,7 @@
         scenario-1 scenario-2 scenario-3 \
         scenario-4 scenario-5 scenario-6 \
         scenario-7 scenario-8 scenario-9 \
-        docs docs-build test
+        docs docs-build docs-install test
 
 # ── Setup ──────────────────────────────────────────
 
@@ -33,8 +33,8 @@ translate:
 	@echo "Translating policy_english.md → Datalog ..."
 	@uv run python -c "\
 	from sasy.policy import write_policy; \
-	english = open('policy_english.md').read(); \
-	r = write_policy(english=english, poll_interval=15.0, \
+	policy = open('policy_english.md').read(); \
+	r = write_policy(policy=policy, poll_interval=15.0, \
 	    on_progress=lambda s,e: print(f'  {s} ({e:.0f}s)')); \
 	r.print_summary(); \
 	r.save_datalog('policy_compiled.dl'); \
@@ -140,8 +140,14 @@ test:
 
 # ── Documentation ──────────────────────────────────
 
-docs:
+# Installs docs-site npm deps on first use (idempotent).
+docs-install:
+	@if [ ! -d docs-site/node_modules ]; then \
+	    cd docs-site && npm install; \
+	fi
+
+docs: docs-install
 	cd docs-site && npm run dev
 
-docs-build:
+docs-build: docs-install
 	cd docs-site && npm run build

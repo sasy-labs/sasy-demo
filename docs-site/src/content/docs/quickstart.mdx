@@ -81,20 +81,25 @@ and runs 9 agent scenarios. You'll see:
 
 ## Translate a Policy
 
-Write your policy in English and translate it to
-Datalog:
+Write your policy in English (plus point the
+translator at your agent's source) and get back a
+Soufflé Datalog policy and companion C++ functors:
 
 <Tabs>
   <TabItem label="SDK">
     ```python
-    from sasy.policy import write_policy
+    from sasy.policy import translate
 
     with open("policy_english.md") as f:
-        english = f.read()
+        policy = f.read()
 
-    result = write_policy(english=english)
+    result = translate(
+        policy,
+        codebase_paths=["src/demo"],  # your agent
+        codebase_root=".",
+    )
     result.print_summary()
-    result.save_datalog("policy_compiled.dl")
+    result.save_all("output/", base_name="airline")
     ```
   </TabItem>
   <TabItem label="Makefile">
@@ -104,20 +109,15 @@ Datalog:
   </TabItem>
 </Tabs>
 
-Translation takes ~5-10 minutes. It produces two
-files in the repo root:
-
-- `policy_compiled.dl` — the generated Datalog
-- `truth_table.tsv` — every test scenario
-
-Then run the demo with your translated policy:
-
-```bash
-make demo-compiled
-```
+Translation takes ~5–15 minutes. Writes
+`output/airline_policy.dl`,
+`output/airline_functors.cpp`, and
+`output/agent_summary.md`.
 
 See [Translate a Policy](/translate/) for the full
-confidence report and verification details.
+API and the [tau2 airline benchmark](/benchmarks/tau2-airline/)
+for empirical confidence numbers across translation
+variants.
 
 ## Enforce a Policy
 

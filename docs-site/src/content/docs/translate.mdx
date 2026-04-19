@@ -1,9 +1,16 @@
 ---
 title: Translate a Policy
-description: Turn an English security policy into verified Datalog.
+description: Turn an English security policy (plus your agent's codebase) into verified Datalog.
 ---
 
 import { Steps, Tabs, TabItem, Code, Aside } from '@astrojs/starlight/components';
+
+The `sasy-translate` cloud service takes a natural-language policy spec plus a snapshot of your agent's codebase and, via a two-stage pipeline (agent analysis → policy generation), produces:
+
+- a Soufflé Datalog policy (`.dl`)
+- a companion C++ functors file (`_functors.cpp`) for content checks
+- a Markdown summary of the agent analysis
+- validation output from the server-side compiler
 
 ## Install the SDK
 
@@ -13,118 +20,119 @@ pip install sasy
 
 ## Write Your English Policy
 
-Create `policy_english.md` describing your authorization
-rules in plain language:
+Create `policy_english.md` describing your authorization rules in plain language. Here's an abridged version of the tau2-airline spec used in the [benchmark](/benchmarks/tau2-airline/):
 
 ```markdown
-# Airline Booking Policy
+# Airline cancellation & modification policy
 
-## Default behavior
-- All actions are authorized by default
+## Cancellation
+- A reservation may be cancelled if any of the following are true:
+  - the cabin class is not "basic_economy",
+  - the reservation was created within the last 24 hours, OR
+  - the reservation has insurance AND the user cites a
+    serious event (medical emergency, bereavement, severe weather).
+- Trivial social reasons (birthdays, weddings, etc.) never justify
+  a cancellation.
 
-## Cancellation policy
-- Gold members can cancel any reservation,
-  regardless of insurance status
-- Silver and regular members can only cancel
-  if the reservation has travel insurance
-
-## Flight modification policy
-- Economy reservations can be modified by any member
-- Basic economy reservations can only be modified
-  by silver or gold members
+## Flight modification
+- Basic-economy reservations cannot have flights modified.
+- Other cabin classes may be modified freely.
 ```
 
 ## Translate It
 
-<Tabs>
-  <TabItem label="Python SDK">
-    ```python
-    from sasy.policy import write_policy
+```python
+from sasy.policy import translate
 
-    with open("policy_english.md") as f:
-        english = f.read()
+with open("policy_english.md") as f:
+    policy = f.read()
 
-    result = write_policy(
-        english=english,
-        on_progress=lambda stage, elapsed: print(
-            f"  {stage} ({elapsed:.0f}s)"
-        ),
-    )
+result = translate(
+    policy,
+    codebase_paths=["tau2-bench/src/tau2"],
+    codebase_root=".",
+    instructions=(
+        "You are enforcing the policy on LLMAgent (the tau2 airline agent).\n"
+        "User messages have msg.agent = \"LLMAgent\" and msg.agent_role = $UserRole().\n"
+        "Use custom C++ functors for content checks, not @llm_check_fn."
+    ),
+    model="sonnet",  # or "haiku" / "opus"
+    on_progress=lambda stage, elapsed: print(f"  {stage} ({elapsed:.0f}s)"),
+)
 
-    result.print_summary()
-    result.save_datalog("policy_compiled.dl")
-    result.save_truth_table("truth_table.tsv")
-    ```
-  </TabItem>
-  <TabItem label="Makefile">
-    ```bash
-    make translate
-    ```
-  </TabItem>
-</Tabs>
+result.print_summary()
+result.save_all("output/", base_name="airline")
+```
+
+This writes `output/airline_policy.dl`, `output/airline_functors.cpp`, and `output/agent_summary.md`.
 
 <Aside>
-  Translation takes 5-10 minutes. The SDK polls
-  automatically and shows progress.
+  Translation takes 5–15 minutes depending on codebase size and model. The SDK polls the job status endpoint and surfaces progress via `on_progress`. Configure the endpoint with `SASY_TRANSLATE_URL` (default `https://sasy-translate.fly.dev`).
 </Aside>
+
+### Key inputs
+
+| Parameter | Description |
+|---|---|
+| `policy` | Natural-language policy spec (10–100k chars) |
+| `codebase_paths` | Source directories the agent analyzer should read |
+| `codebase_root` | Path prefix stripped when zipping — becomes the sandbox root |
+| `instructions` | Domain-specific guidance (agent name, functor preference, etc.) |
+| `model` | `haiku` (cheap, weaker), `sonnet` (default), or `opus` |
+| `focus_paths` | Optional globs to narrow stage-1 analysis |
+
+### What the service does
+
+1. **Isolates the job** — your codebase is unpacked into a fresh bubblewrap sandbox per request, with an egress allowlist and read-only toolkit mount.
+2. **Stage 1** — an agent reads your codebase and produces `agent_summary.md` describing instrumentation points, tool calls, and message flow.
+3. **Stage 2** — a second agent, armed with the summary and the `policy-compiler` skill, writes the Datalog policy + functors.
+4. **Server-side validation** — the artifacts are compiled against the toolkit's `common_policy.dl` before being returned.
 
 ## What You Get Back
 
 | Artifact | Access | Description |
 |----------|--------|-------------|
-| Datalog policy | `result.datalog` | Generated Souffl&eacute; rules |
-| Structured spec | `result.structured_spec` | Numbered clauses (C1, C2, ...) |
-| Truth table | `result.truth_table_tsv` | Every test scenario + decision |
-| Verification | `result.verification` | Assertion counts, checks, audit |
-
-Save artifacts to files:
-
-```python
-result.save_datalog("policy_compiled.dl")
-result.save_truth_table("truth_table.tsv")
-```
+| Datalog policy | `result.policy_dl` | Generated Soufflé rules (ready to upload) |
+| C++ functors | `result.functors_cpp` | String-matching / date helpers |
+| Agent summary | `result.agent_summary_md` | Stage-1 output |
+| Validation | `result.validation` | `ok`, lint errors, Soufflé output |
+| Errors | `result.errors` | Any stage or validation failures |
+| Cost | `result.cost_usd` | Anthropic API usage for this job |
 
 ## Upload and Enforce
 
 ```python
-from sasy.policy import upload_policy
+from sasy.policy import upload_policy_file
 
-with open("policy_compiled.dl") as f:
-    datalog = f.read()
-
-resp = upload_policy(
-    policy_source=datalog,
-    hot_reload=True,
-)
+resp = upload_policy_file("output/airline_policy.dl")
 print("Uploaded!" if resp.accepted else resp.error_output)
 ```
 
-Or:
+Or via the Makefile:
 
 ```bash
-make upload-compiled
+make upload-policy POLICY=output/airline_policy.dl
 ```
 
-The policy is now live. Every tool call is checked
-against it in real time.
+The policy is now live. Every tool call is checked against it in real time — see [How Enforcement Works](/demo/enforcement/).
 
-## Compare Variants
+## Variance & Robustness
 
-Test whether different phrasings produce the same
-policy:
+Translation is non-deterministic. For robustness studies, run N independent translations from the original spec plus N from paraphrased versions:
+
+```bash
+uv run python benchmarks/tau2-airline/run.py variance --n 3
+```
+
+This produces `output/original_{1..N}/` and `output/paraphrase_{1..N}/`, each with its own `airline_policy.dl`. The [tau2 benchmark page](/benchmarks/tau2-airline/) shows how these compare to hand-tuned and LLM-judge baselines.
+
+## Experimental: extended policy validation
+
+A second translator (`sasy.policy.write_policy`) is available as a prototype for extended policy validation — it emits a truth table and adversarial verifier checks alongside the Datalog. Useful for short, self-contained policies but **not recommended** for production agents. It does not read a codebase. Use `translate` for anything non-trivial. See the [confidence report](/policy/confidence/) for how to read the verification artifacts it emits.
 
 ```python
-from sasy.policy import write_policies
+from sasy.policy import write_policy  # experimental
 
-results = write_policies(
-    [variant_a, variant_b],
-)
-
-for i, r in enumerate(results):
-    print(f"\nVariant {i+1}:")
-    r.print_summary()
+result = write_policy(policy=policy)
+result.save_datalog("policy_compiled.dl")
 ```
-
-If both variants produce the same truth table shape
-(same ALLOW/DENY/GUARD_DENY counts), the
-translation is robust to phrasing differences.

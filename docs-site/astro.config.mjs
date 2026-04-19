@@ -25,7 +25,7 @@ export default defineConfig({
           label: 'Policy',
           items: [
             { label: 'Policy Walkthrough', slug: 'policy/walkthrough' },
-            { label: 'Confidence Report', slug: 'policy/confidence' },
+            { label: 'Confidence Report (experimental)', slug: 'policy/confidence' },
           ],
         },
         {
@@ -33,6 +33,12 @@ export default defineConfig({
           items: [
             { label: 'Scenarios', slug: 'demo/scenarios' },
             { label: 'How Enforcement Works', slug: 'demo/enforcement' },
+          ],
+        },
+        {
+          label: 'Benchmarks',
+          items: [
+            { label: 'Tau2 Airline', slug: 'benchmarks/tau2-airline' },
           ],
         },
       ],

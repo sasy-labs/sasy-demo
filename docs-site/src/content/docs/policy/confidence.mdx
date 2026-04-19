@@ -1,9 +1,19 @@
 ---
-title: Confidence Report
-description: How to verify the translation is correct.
+title: Confidence Report (experimental)
+description: Truth-table + verifier artifacts produced by the experimental policy translator.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
+
+This page describes the artifacts produced by the
+experimental policy translator
+(`sasy.policy.write_policy`) — a prototype for
+extended validation that generates a truth table and
+adversarial verifier checks alongside the Datalog. It
+does not read your agent's codebase, so the primary
+[`translate`](/translate/) flow is usually a better
+fit; the [tau2 airline benchmark](/benchmarks/tau2-airline/)
+gives empirical confidence numbers there.
 
 When you translate a policy with `write_policy()`,
 the result includes a verification report. Here's
@@ -45,9 +55,33 @@ shows what the policy decides for that scenario.
 - **GUARD_DENY** — the policy can't decide because
   required data hasn't been looked up yet
 
+Abridged view of the generated table for the
+airline demo policy:
+
+| Action | Membership | Insurance | Cabin | Decision |
+|--------|-----------|-----------|-------|----------|
+| cancel | gold | no | — | ALLOW |
+| cancel | gold | yes | — | ALLOW |
+| cancel | silver | yes | — | ALLOW |
+| cancel | silver | no | — | **DENY** |
+| cancel | regular | yes | — | ALLOW |
+| cancel | regular | no | — | **DENY** |
+| cancel | unknown | no | — | GUARD_DENY |
+| modify | any | — | economy | ALLOW |
+| modify | silver | — | basic_economy | ALLOW |
+| modify | gold | — | basic_economy | ALLOW |
+| modify | regular | — | basic_economy | **DENY** |
+| modify | unknown | — | unknown | GUARD_DENY |
+
+<Aside type="tip">
+  **GUARD_DENY** means the policy can't decide yet —
+  the agent needs to call `get_reservation_details`
+  first. This is the prerequisite guard in action.
+</Aside>
+
 <Aside>
-  The truth table is saved as a TSV file. Open it in
-  a spreadsheet to review every scenario:
+  The full truth table is saved as a TSV file. Open
+  it in a spreadsheet to review every scenario:
   `result.save_truth_table("truth_table.tsv")`
 </Aside>
 
@@ -120,3 +154,31 @@ If independent checks fail, the structured
 specification may need adjustment. Review the
 check results and update the English policy to
 resolve any ambiguities.
+
+## Running the experimental flow end-to-end
+
+The demo repo ships Makefile targets for the
+`write_policy` path. They translate
+`policy_english.md`, save the artifacts to the
+repo root, and run the 9-scenario demo against the
+compiled policy.
+
+```bash
+# English → Datalog (produces policy_compiled.dl + truth_table.tsv)
+make translate
+
+# Upload + run the 9 scenarios against the compiled policy
+make demo-compiled
+
+# Interactive stepwise variant
+make demo-compiled-step
+
+# Upload the compiled policy only (no demo run)
+make upload-compiled
+```
+
+`make demo-compiled` swaps `policy_compiled.dl`
+into `policy.dl` for the demo run, then restores
+the original. Use `make demo` to run against the
+hand-written reference policy that ships with the
+repo.
