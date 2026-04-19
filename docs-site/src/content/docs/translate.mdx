@@ -51,11 +51,7 @@ result = translate(
     policy,
     codebase_paths=["tau2-bench/src/tau2"],
     codebase_root=".",
-    instructions=(
-        "You are enforcing the policy on LLMAgent (the tau2 airline agent).\n"
-        "User messages have msg.agent = \"LLMAgent\" and msg.agent_role = $UserRole().\n"
-        "Use custom C++ functors for content checks, not @llm_check_fn."
-    ),
+    instructions="<custom instructions>",  # e.g. agent name, tool conventions
     on_progress=lambda stage, elapsed: print(f"  {stage} ({elapsed:.0f}s)"),
 )
 
@@ -63,7 +59,7 @@ result.print_summary()
 result.save_all("output/", base_name="airline")
 ```
 
-This writes `output/airline_policy.dl`, `output/airline_functors.cpp`, and `output/agent_summary.md`.
+This writes `output/airline_policy.dl`, `output/airline_functors.cpp`, and `output/agent_summary.md`. See `benchmarks/tau2-airline/run.py` for the concrete instructions used to produce the benchmark results.
 
 <Aside>
   Translation takes 5–15 minutes depending on codebase size and model. The SDK polls the job status endpoint and surfaces progress via `on_progress`. Configure the endpoint with `SASY_TRANSLATE_URL` (default `https://sasy-translate.fly.dev`).
@@ -77,7 +73,7 @@ This writes `output/airline_policy.dl`, `output/airline_functors.cpp`, and `outp
 | `codebase_paths` | Source directories the agent analyzer should read |
 | `codebase_root` | Path prefix stripped when zipping — becomes the sandbox root |
 | `instructions` | Domain-specific guidance (agent name, functor preference, etc.) |
-| `model` | `haiku` (default), `sonnet`, or `opus` |
+| `model` | `haiku`, `sonnet` (default), or `opus` |
 | `focus_paths` | Optional globs to narrow stage-1 analysis |
 
 ### What the service does

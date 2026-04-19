@@ -145,7 +145,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("mode", choices=["single", "variance"])
     ap.add_argument("--n", type=int, default=3, help="N for variance mode")
-    ap.add_argument("--model", default="haiku", choices=["haiku", "sonnet", "opus"])
+    ap.add_argument("--model", default="sonnet", choices=["haiku", "sonnet", "opus"])
     ap.add_argument("--parallel", type=int, default=4, help="concurrent translations")
     args = ap.parse_args()
 
