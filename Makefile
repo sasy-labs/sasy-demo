@@ -40,8 +40,13 @@ setup:
 # installs the sasy SDK editable from a sibling ../sasy checkout
 # via uv's --with-editable. Drop the flag once published.
 
-SASY_SDK_SRC := ../sasy/packages/sasy
-UV_RUN_SDK := uv run --with-editable $(SASY_SDK_SRC)
+SASY_SDK_SRC ?= ../sasy/packages/sasy
+# When the sibling SDK checkout exists we re-resolve it via uv's
+# --with-editable on every call. Otherwise we honor whatever sasy is
+# already installed in .venv (e.g. after `VIRTUAL_ENV=.venv uv pip
+# install -e /path/to/packages/sasy`) and suppress uv's auto-sync so
+# the editable install doesn't get clobbered by the PyPI pin.
+UV_RUN_SDK := $(if $(wildcard $(SASY_SDK_SRC)/pyproject.toml),uv run --with-editable $(SASY_SDK_SRC),uv run --no-sync)
 
 # Silence gRPC's noisy INFO/WARN messages (e.g. "FD from fork parent
 # still in poll list") emitted when agent traffic spawns subprocesses.
