@@ -35,18 +35,7 @@ setup:
 # C++ functors via the sasy-translate cloud service. Takes ~5–15 min.
 # Writes output/airline_policy.dl, output/airline_functors.cpp,
 # output/agent_summary.md.
-#
-# NOTE: until the new translate() function is on PyPI, this target
-# installs the sasy SDK editable from a sibling ../sasy checkout
-# via uv's --with-editable. Drop the flag once published.
-
-SASY_SDK_SRC ?= ../sasy/packages/sasy
-# When the sibling SDK checkout exists we re-resolve it via uv's
-# --with-editable on every call. Otherwise we honor whatever sasy is
-# already installed in .venv (e.g. after `VIRTUAL_ENV=.venv uv pip
-# install -e /path/to/packages/sasy`) and suppress uv's auto-sync so
-# the editable install doesn't get clobbered by the PyPI pin.
-UV_RUN_SDK := $(if $(wildcard $(SASY_SDK_SRC)/pyproject.toml),uv run --with-editable $(SASY_SDK_SRC),uv run --no-sync)
+UV_RUN_SDK := uv run
 
 # Silence gRPC's noisy INFO/WARN messages (e.g. "FD from fork parent
 # still in poll list") emitted when agent traffic spawns subprocesses.
@@ -146,7 +135,7 @@ translate-experimental:
 	@uv run python -c "\
 	from sasy.policy import write_policy; \
 	english = open('policy_english.md').read(); \
-	r = write_policy(english=english, poll_interval=15.0, \
+	r = write_policy(policy=english, poll_interval=15.0, \
 	    on_progress=lambda s,e: print(f'  {s} ({e:.0f}s)')); \
 	r.print_summary(); \
 	r.save_datalog('policy_compiled.dl'); \

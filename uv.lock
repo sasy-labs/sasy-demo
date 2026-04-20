@@ -3256,7 +3256,7 @@ wheels = [
 
 [[package]]
 name = "sasy"
-version = "0.4.2"
+version = "0.4.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography" },
@@ -3271,9 +3271,9 @@ dependencies = [
     { name = "pyyaml" },
     { name = "wrapt" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/2d/e1/5a1ebc7a4862747eb90bf02b84dcb2247b39680e32158573d4a2f0293b08/sasy-0.4.2.tar.gz", hash = "sha256:24060b1f46dea20d813c38befe025c472933d0abd6e90f6e31d435e5e249cfd8", size = 79206, upload-time = "2026-04-11T00:03:43.641Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/61/86/082b41153aabb23f77e35cc19708c8d5f67e7b72fd7dade9ae3595695803/sasy-0.4.4.tar.gz", hash = "sha256:a1c87a66ab5a4945f25eda7c72f85a9e72a004b92232ef34b877c1a58f766cc7", size = 82485, upload-time = "2026-04-20T21:04:36.022Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/7a/b5/e1c1a03f74aed6d67bdd6820b4c66321536bf612684c21a8c2887acc631c/sasy-0.4.2-py3-none-any.whl", hash = "sha256:ec963cb7c92abd6b028f7bbc873579ba64253170706d84a5c0e8035cedcf763b", size = 97968, upload-time = "2026-04-11T00:03:42.657Z" },
+    { url = "https://files.pythonhosted.org/packages/cd/b7/f25dd5b4a4543e7b68314a5a16cf4278a83f4be97c6f0e2600ba497ae1d9/sasy-0.4.4-py3-none-any.whl", hash = "sha256:aa119b226f0c9b11c083354e57f6bfb4d28d49e4af50c58b9325065bb06e5961", size = 102841, upload-time = "2026-04-20T21:04:34.667Z" },
 ]
 
 [[package]]
@@ -3294,7 +3294,7 @@ requires-dist = [
     { name = "openai", specifier = ">=1.0" },
     { name = "pydantic", specifier = ">=2.0" },
     { name = "python-dotenv", specifier = ">=1.0" },
-    { name = "sasy", specifier = ">=0.4.2" },
+    { name = "sasy", specifier = ">=0.4.4" },
 ]
 
 [[package]]
