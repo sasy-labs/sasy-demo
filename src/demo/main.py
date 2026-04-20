@@ -91,7 +91,10 @@ def main() -> None:
         print(
             "ERROR: SASY_API_KEY is not set.\n"
             "Add it to your .env file:\n"
-            "  SASY_API_KEY=demo-key-..."
+            "  SASY_API_KEY=demo-key-...\n"
+            "\n"
+            "Note: SASY_API_KEY_SUFFIX (used previously) "
+            "is no longer read. Set the full key directly."
         )
         sys.exit(1)
 

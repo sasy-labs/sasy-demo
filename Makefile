@@ -165,7 +165,7 @@ demo-compiled:
 	@mv policy.dl.bak policy.dl 2>/dev/null || true
 
 demo-compiled-step:
-	@cp policy.dl policy.bak 2>/dev/null || true
+	@cp policy.dl policy.dl.bak 2>/dev/null || true
 	@cp policy_compiled.dl policy.dl
 	STEP_MODE=1 $(UV_RUN_SDK) python -m demo.main --all
 	@mv policy.dl.bak policy.dl 2>/dev/null || true
