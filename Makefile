@@ -173,7 +173,7 @@ demo-compiled-step:
 # ── Validation ─────────────────────────────────────
 
 test:
-	uv run pytest tests/ -xvs
+	$(UV_RUN_SDK) pytest tests/ -xvs
 
 # ── Documentation ──────────────────────────────────
 

@@ -7,8 +7,7 @@ Verifies the full pipeline through sasy.fly.dev:
   4. Assert the policy fires the CORRECT specific rule
      based on conversation context, not the catch-all
 
-Run:
-    SASY_API_KEY_SUFFIX=<suffix> \
+Run (requires SASY_API_KEY in environment):
     pytest tests/test_graph_policy.py -xvs
 """
 
@@ -18,6 +17,11 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+from dotenv import load_dotenv
+
+# Load .env from the demo root so SASY_API_KEY (and friends)
+# set via the Quickstart flow are picked up automatically.
+load_dotenv(Path(__file__).parent.parent / ".env")
 
 # ── sasy setup ──────────────────────────────────────────
 
@@ -25,11 +29,10 @@ import pytest
 @pytest.fixture(scope="module", autouse=True)
 def configure_sasy():
     """Configure sasy to talk to fly.io and upload policy."""
-    suffix = os.environ.get("SASY_API_KEY_SUFFIX")
-    if not suffix:
-        pytest.skip("SASY_API_KEY_SUFFIX not set")
+    api_key = os.environ.get("SASY_API_KEY")
+    if not api_key:
+        pytest.skip("SASY_API_KEY not set")
 
-    api_key = f"demo-key-{suffix}"
     sasy_url = os.environ.get(
         "SASY_URL", "sasy.fly.dev:443"
     )

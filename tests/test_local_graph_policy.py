@@ -27,27 +27,32 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+from dotenv import load_dotenv
+
+# Load .env from the demo root so SASY_API_KEY set via the
+# Quickstart flow is picked up automatically.
+load_dotenv(Path(__file__).parent.parent / ".env")
 
 
 @pytest.fixture(scope="module", autouse=True)
 def configure_sasy():
     """Configure sasy (local or cloud via env vars).
 
-    For local: just run the binary, no env vars needed.
-    For cloud: set SASY_API_KEY_SUFFIX.
+    For cloud: set SASY_API_KEY (in .env per Quickstart,
+    or in shell).
+    For local: start ``make serve-airline``; ensure
+    SASY_API_KEY is not set in the environment.
     """
-    suffix = os.environ.get("SASY_API_KEY_SUFFIX")
-    sasy_url = os.environ.get(
-        "SASY_URL", "localhost:10089"
-    )
+    api_key = os.environ.get("SASY_API_KEY")
 
-    if suffix:
-        # Cloud mode
-        api_key = f"demo-key-{suffix}"
+    if api_key:
+        # Cloud mode — SASY_API_KEY present signals cloud target
+        sasy_url = os.environ.get(
+            "SASY_URL", "sasy.fly.dev:443"
+        )
         os.environ.pop("TLS_CA_PATH", None)
         os.environ.pop("TLS_CERT_PATH", None)
         os.environ.pop("TLS_KEY_PATH", None)
-        os.environ["SASY_URL"] = sasy_url
 
         from sasy.auth.hooks import APIKeyAuthHook
         from sasy.config import configure
