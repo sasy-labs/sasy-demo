@@ -65,16 +65,6 @@ class ActionEvaluator(EvaluatorBase):
             ) and message.is_tool_call():
                 predicted_tool_calls.extend(message.tool_calls)
 
-        # Debug: Log all tool calls
-        print(f"\n{'='*60}")
-        print(f"DEBUG: Agent made {len(predicted_tool_calls)} tool calls:")
-        for tc in predicted_tool_calls:
-            print(f"  - {tc.name}({tc.arguments})")
-        print(f"DEBUG: Expected {len(golden_actions)} golden actions:")
-        for ga in golden_actions:
-            print(f"  - {ga.name}({ga.arguments})")
-        print(f"{'='*60}\n")
-
         # Check if all the gold actions are in the predicted actions
         action_checks = []
         for gold_action in golden_actions:

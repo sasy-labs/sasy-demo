@@ -24,7 +24,7 @@
 #
 # Env vars:
 #   TAU2_LLM_POLICY_DOMAIN      airline | retail | mock (required)
-#   TAU2_LLM_POLICY_MODEL       model name (default: gpt-4.1-mini)
+#   TAU2_LLM_POLICY_MODEL       model name (default: gpt-5.4-nano)
 #   TAU2_LLM_POLICY_AZURE       "1" → use AzureConfig, else OpenAIGPTConfig
 #   TAU2_LLM_POLICY_CONTEXT        "linear" (default) → one-hop backward
 #                                  slice of the assistant message, sorted
@@ -226,7 +226,7 @@ def _llm_config():
     from langroid.language_models.azure_openai import AzureConfig
 
     model = os.environ.get(
-        "TAU2_LLM_POLICY_MODEL", "gpt-4.1-mini"
+        "TAU2_LLM_POLICY_MODEL", "gpt-5.4-nano"
     )
     use_azure = os.environ.get(
         "TAU2_LLM_POLICY_AZURE", "0"

@@ -69,18 +69,9 @@ class LLMAgent(LocalAgent[LLMAgentState]):
 
     @property
     def system_prompt(self) -> str:
-        prompt = SYSTEM_PROMPT.format(
+        return SYSTEM_PROMPT.format(
             domain_policy=self.domain_policy, agent_instruction=AGENT_INSTRUCTION
         )
-        # Debug: Print system prompt info
-        print(f"\n{'='*60}")
-        print(f"DEBUG: System prompt length: {len(prompt)} chars")
-        print(f"DEBUG: Policy length: {len(self.domain_policy)} chars")
-        print(f"DEBUG: Policy empty: {len(self.domain_policy) == 0}")
-        if len(self.domain_policy) > 0:
-            print(f"DEBUG: Policy preview: {self.domain_policy[:200]}...")
-        print(f"{'='*60}\n")
-        return prompt
 
     def get_init_state(
         self, message_history: Optional[list[Message]] = None

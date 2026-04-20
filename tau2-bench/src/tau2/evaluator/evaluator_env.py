@@ -116,25 +116,6 @@ class EnvironmentEvaluator(EvaluatorBase):
         else:
             db_reward = 0.0
             db_match = False
-            # Debug: Log DB mismatch details
-            print(f"\n{'='*60}")
-            print("DEBUG: DB MISMATCH DETECTED")
-            try:
-                gold_res = gold_environment.tools.db.reservations
-                pred_res = predicted_environment.tools.db.reservations
-                for res_id in set(gold_res.keys()) | set(pred_res.keys()):
-                    if res_id in gold_res and res_id in pred_res:
-                        if gold_res[res_id] != pred_res[res_id]:
-                            print(f"DIFF in reservation {res_id}")
-                            print(f"  Gold status: {gold_res[res_id].status}")
-                            print(f"  Pred status: {pred_res[res_id].status}")
-                    elif res_id in gold_res:
-                        print(f"MISSING in predicted: {res_id}")
-                    else:
-                        print(f"EXTRA in predicted: {res_id}")
-            except Exception as e:
-                print(f"Could not compare reservations: {e}")
-            print(f"{'='*60}\n")
 
         db_check = DBCheck(db_match=db_match, db_reward=db_reward)
 

@@ -35,6 +35,7 @@ import shutil
 import subprocess
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -78,7 +79,6 @@ def run_tau2(task_ids: list[int], trials: int, concurrency: int, agent_llm: str,
     # Snapshot existing sims so we can pick the new one afterward
     prev = set(TAU2_SIMS_DIR.glob("*.json")) if TAU2_SIMS_DIR.exists() else set()
 
-    env = os.environ.copy()
     cmd = [
         "uv", "run", "tau2-instrumented", "run",
         "--domain", "airline",
@@ -88,7 +88,7 @@ def run_tau2(task_ids: list[int], trials: int, concurrency: int, agent_llm: str,
         "--user-llm", user_llm,
         "--max-concurrency", str(concurrency),
     ]
-    result = subprocess.run(cmd, env=env, check=False)
+    result = subprocess.run(cmd, check=False)
     if result.returncode != 0:
         log.warning("tau2 exited with non-zero code %d (continuing)", result.returncode)
 
@@ -103,8 +103,13 @@ def run_tau2(task_ids: list[int], trials: int, concurrency: int, agent_llm: str,
 
 def eval_one(policy_path: Path, label: str, task_ids: list[int], trials: int, concurrency: int,
              agent_llm: str, user_llm: str) -> dict:
-    result_dir = RESULTS_DIR / label
+    # Write each run under a UTC-timestamped subdirectory so re-runs don't
+    # clobber checked-in baselines (e.g. --label reference).
+    run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    result_dir = RESULTS_DIR / label / run_id
     result_dir.mkdir(parents=True, exist_ok=True)
+    (RESULTS_DIR / label / "latest").unlink(missing_ok=True)
+    (RESULTS_DIR / label / "latest").symlink_to(run_id)
 
     upload_policy(policy_path)
 
