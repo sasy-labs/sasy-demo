@@ -56,8 +56,13 @@ def configure_sasy() -> None:
     log.info("sasy configured: url=%s auth=%s", cfg.url, type(cfg.auth_hook).__name__)
 
 
-def upload_policy(policy_path: Path, functors_path: Path | None = None) -> None:
-    """Upload a policy (and optional companion functors) to the running SASY."""
+def upload_policy(policy_path: Path) -> None:
+    """Upload a policy to the running SASY.
+
+    ``upload_policy_file`` auto-detects a companion ``_functors.cpp``
+    sitting next to the ``.dl`` via ``sasy.policy.find_functors``, so
+    this helper just needs the policy path.
+    """
     from sasy.policy import upload_policy_file
 
     log.info("uploading %s", policy_path)
