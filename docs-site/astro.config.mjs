@@ -5,7 +5,7 @@ import starlight from '@astrojs/starlight';
 export default defineConfig({
   integrations: [
     starlight({
-      title: 'SASY Policy Demo',
+      title: 'SASY Policy Translation and Enforcement Demo',
       social: [
         {
           icon: 'github',
