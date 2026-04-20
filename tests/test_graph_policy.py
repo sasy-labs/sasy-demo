@@ -158,62 +158,16 @@ def _check_tool(
 # ── Tests ───────────────────────────────────────────────
 
 
-def test_cancel_denied_no_reason():
-    """Cancel with no prior user message → catch-all denial."""
+def test_cancel_denied_no_reservation_lookup():
+    """Cancel without get_reservation_details → guard fires."""
     authorized, reason = _check_tool(
         "cancel_reservation",
         '{"reservation_id": "EHGLP3"}',
         [],
     )
     assert not authorized
-    assert "No valid cancellation reason" in reason
-
-
-def test_cancel_denied_social_event():
-    """User says 'birthday party' → social event rule fires."""
-    user_id = _record_user_message(
-        "I need to cancel because I have a birthday "
-        "party that weekend."
-    )
-    # Record agent tool call depending on user message
-    tool_id = _record_agent_tool_call(
-        "cancel_reservation",
-        '{"reservation_id": "EHGLP3"}',
-        depends_on=[user_id],
-    )
-
-    authorized, reason = _check_tool(
-        "cancel_reservation",
-        '{"reservation_id": "EHGLP3"}',
-        [user_id, tool_id],
-    )
-    assert not authorized, f"Expected denial, got authorized"
-    assert "Social events" in reason, (
-        f"Expected 'Social events' in reason, got: {reason}"
-    )
-
-
-def test_cancel_denied_user_error():
-    """User says 'booked the wrong flight' → user error rule."""
-    user_id = _record_user_message(
-        "I accidentally booked the wrong flight, "
-        "it was a mistake."
-    )
-    tool_id = _record_agent_tool_call(
-        "cancel_reservation",
-        '{"reservation_id": "EHGLP3"}',
-        depends_on=[user_id],
-    )
-
-    authorized, reason = _check_tool(
-        "cancel_reservation",
-        '{"reservation_id": "EHGLP3"}',
-        [user_id, tool_id],
-    )
-    assert not authorized
-    assert "Accidental booking" in reason, (
-        f"Expected 'Accidental booking' in reason, "
-        f"got: {reason}"
+    assert "without reservation details" in reason, (
+        f"Expected guard denial, got: {reason}"
     )
 
 

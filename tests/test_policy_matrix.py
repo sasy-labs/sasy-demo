@@ -208,7 +208,7 @@ class TestGuardRules:
         )
         assert not result.authorized
         assert any(
-            "look up" in r.lower()
+            "without reservation details" in r
             for r in result.reasons
         ), f"Expected guard message: {result.reasons}"
 
@@ -220,7 +220,7 @@ class TestGuardRules:
         )
         assert not result.authorized
         assert any(
-            "look up" in r.lower()
+            "without reservation details" in r
             for r in result.reasons
         ), f"Expected guard message: {result.reasons}"
 
