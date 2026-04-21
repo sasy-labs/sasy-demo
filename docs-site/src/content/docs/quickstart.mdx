@@ -167,16 +167,22 @@ from sasy.reference_monitor import check_tool_call
 auth = check_tool_call(
     fn_name="cancel_reservation",
     args='{"reservation_id": "RKLA42"}',
-    input_node_ids=event_ids,
+    # Pass the observability event IDs that led up to this
+    # call (user message, prior tool results, etc.) when the
+    # policy depends on message-graph context. For a bare
+    # check with no prior context, pass None or [].
+    input_node_ids=None,
 )
 
 if auth.authorized:
     # Execute the tool
     result = cancel_reservation(reservation_id="RKLA42")
 else:
-    # Policy denied — show the reason
-    print(f"Denied: {auth.denial_reasons}")
-    print(f"Suggestions: {auth.suggestions}")
+    # Policy denied — denial_trace has the human-readable
+    # reasons + suggested remediation steps.
+    reasons = [r.details for r in auth.denial_trace.reasons]
+    print(f"Denied: {reasons}")
+    print(f"Suggestions: {list(auth.denial_trace.suggested_fixes)}")
 ```
 
 Every tool call your agent makes goes through
