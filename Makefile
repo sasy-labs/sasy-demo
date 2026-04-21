@@ -134,8 +134,8 @@ translate-experimental:
 	@echo "Translating policy_english.md → Datalog (experimental) ..."
 	@uv run python -c "\
 	from sasy.policy import write_policy; \
-	english = open('policy_english.md').read(); \
-	r = write_policy(policy=english, poll_interval=15.0, \
+	policy = open('policy_english.md').read(); \
+	r = write_policy(policy=policy, poll_interval=15.0, \
 	    on_progress=lambda s,e: print(f'  {s} ({e:.0f}s)')); \
 	r.print_summary(); \
 	r.save_datalog('policy_compiled.dl'); \
