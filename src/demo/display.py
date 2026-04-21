@@ -36,12 +36,21 @@ _WHITE = "\033[37m"
 
 
 def _pause() -> None:
-    """Pause for Enter if step mode is on."""
-    if STEP_MODE:
+    """Pause for Enter if step mode is on.
+
+    Falls through silently when stdin isn't a TTY
+    (CI, log capture, piped runs) so step-mode demos
+    can still complete instead of crashing on EOF.
+    """
+    if not STEP_MODE:
+        return
+    try:
         input(
             f"{_DIM}  Press Enter to continue..."
             f"{_RESET}"
         )
+    except EOFError:
+        pass
 
 
 def _wrap(text: str, prefix: str = "") -> str:

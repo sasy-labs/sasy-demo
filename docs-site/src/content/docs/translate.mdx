@@ -59,7 +59,7 @@ result.print_summary()
 result.save_all("output/", base_name="airline")
 ```
 
-This writes `output/airline_policy.dl`, `output/airline_functors.cpp`, and `output/agent_summary.md`. See `benchmarks/tau2-airline/run.py` for the concrete instructions used to produce the benchmark results.
+This writes `output/airline_policy.dl` and `output/agent_summary.md`, plus `output/airline_functors.cpp` *only when the policy needs custom C++ helpers* — content matching, date arithmetic, NLP classifiers, etc. The simple Quickstart policy is pure attribute matching, so Soufflé handles every rule natively and no functors file is emitted; the richer [tau2 airline benchmark policy](/benchmarks/tau2-airline/) does produce functors. See `benchmarks/tau2-airline/run.py` for the concrete instructions used to produce the benchmark results.
 
 <Aside>
   Translation takes 5–15 minutes depending on codebase size and model. The SDK polls the job status endpoint and surfaces progress via `on_progress`. Configure the endpoint with `SASY_TRANSLATE_URL` (default `https://sasy-translate.fly.dev`).

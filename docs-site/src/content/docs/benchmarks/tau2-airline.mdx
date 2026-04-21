@@ -20,7 +20,10 @@ All tasks should end with **no database modification** — the agent should refu
 - **Trials per task**: 5 (total: 25 simulations per configuration)
 - **LLM judge model (strong)**: Claude Opus 4.5
 - **LLM judge model (weak)**: GPT-5.4-nano
-- **Translator model**: Claude Opus 4.7
+- **Translator model**: Claude Opus 4.7 (passed as
+  `translate(..., model="opus")`; the SDK default
+  is `"haiku"` for cost — pass `model="opus"` to
+  reproduce these numbers)
 
 ## Overall results
 
