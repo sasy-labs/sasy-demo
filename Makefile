@@ -46,10 +46,12 @@ export GRPC_VERBOSITY ?= ERROR
 translate:
 	@echo "Translating policy_english.md + src/demo/ → Datalog ..."
 	@$(UV_RUN_SDK) python -c "\
+	import logging; \
+	logging.basicConfig(format='%(message)s'); \
+	logging.getLogger('sasy').setLevel(logging.INFO); \
 	from sasy.policy import translate; \
 	policy = open('policy_english.md').read(); \
-	r = translate(policy, codebase_paths=['src/demo'], codebase_root='.', \
-	    on_progress=lambda s,e: print(f'  {s} ({e:.0f}s)')); \
+	r = translate(policy, codebase_paths=['src/demo']); \
 	r.print_summary(); \
 	saved = r.save_all('output/', base_name='airline'); \
 	print('\nSaved: ' + ', '.join(str(p) for p in saved.values()))"

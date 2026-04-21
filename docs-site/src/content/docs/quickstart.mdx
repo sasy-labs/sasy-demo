@@ -90,7 +90,12 @@ Soufflé Datalog policy and companion C++ functors:
 <Tabs>
   <TabItem label="SDK">
     ```python
+    import logging
     from sasy.policy import translate
+
+    # See progress while the job runs.
+    logging.basicConfig(format="%(message)s")
+    logging.getLogger("sasy").setLevel(logging.INFO)
 
     with open("policy_english.md") as f:
         policy = f.read()
@@ -98,7 +103,6 @@ Soufflé Datalog policy and companion C++ functors:
     result = translate(
         policy,
         codebase_paths=["src/demo"],  # your agent
-        codebase_root=".",
     )
     result.print_summary()
     result.save_all("output/", base_name="airline")

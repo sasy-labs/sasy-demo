@@ -42,7 +42,12 @@ Create `policy_english.md` describing your authorization rules in plain language
 ## Translate It
 
 ```python
+import logging
 from sasy.policy import translate
+
+# See progress while the job runs.
+logging.basicConfig(format="%(message)s")
+logging.getLogger("sasy").setLevel(logging.INFO)
 
 with open("policy_english.md") as f:
     policy = f.read()
@@ -50,9 +55,7 @@ with open("policy_english.md") as f:
 result = translate(
     policy,
     codebase_paths=["tau2-bench/src/tau2"],
-    codebase_root=".",
     instructions="<custom instructions>",  # e.g. agent name, tool conventions
-    on_progress=lambda stage, elapsed: print(f"  {stage} ({elapsed:.0f}s)"),
 )
 
 result.print_summary()
@@ -62,7 +65,7 @@ result.save_all("output/", base_name="airline")
 This writes `output/airline_policy.dl` and `output/agent_summary.md`, plus `output/airline_functors.cpp` *only when the policy needs custom C++ helpers* — content matching, date arithmetic, NLP classifiers, etc. The simple Quickstart policy is pure attribute matching, so Soufflé handles every rule natively and no functors file is emitted; the richer [tau2 airline benchmark policy](/benchmarks/tau2-airline/) does produce functors. See `benchmarks/tau2-airline/run.py` for the concrete instructions used to produce the benchmark results.
 
 <Aside>
-  Translation takes 5–15 minutes depending on codebase size and model. The SDK polls the job status endpoint and surfaces progress via `on_progress`. Configure the endpoint with `SASY_TRANSLATE_URL` (default `https://sasy-translate.fly.dev`).
+  Translation takes 5–15 minutes depending on codebase size and model. The SDK polls the job status endpoint and emits progress lines through Python `logging` at INFO under the `sasy` logger; pass `on_progress=lambda stage, elapsed: ...` if you want a programmatic callback (e.g. to drive a progress bar). Configure the endpoint with `SASY_TRANSLATE_URL` (default `https://sasy-translate.fly.dev`).
 </Aside>
 
 ### Key inputs
@@ -71,7 +74,7 @@ This writes `output/airline_policy.dl` and `output/agent_summary.md`, plus `outp
 |---|---|
 | `policy` | Natural-language policy spec (10–100k chars) |
 | `codebase_paths` | Source directories the agent analyzer should read |
-| `codebase_root` | Path prefix stripped when zipping — becomes the sandbox root |
+| `codebase_root` | Optional. Path prefix stripped when zipping — controls how paths appear in `agent_summary.md`. Defaults to `Path.cwd()` when every codebase path is under cwd (preserves your repo-relative paths); falls back to the common ancestor otherwise. |
 | `instructions` | Domain-specific guidance (agent name, functor preference, etc.) |
 | `model` | `haiku`, `sonnet` (default), or `opus` |
 | `focus_paths` | Optional globs to narrow stage-1 analysis |
