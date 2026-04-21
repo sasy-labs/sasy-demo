@@ -7,8 +7,7 @@ Verifies the full pipeline through sasy.fly.dev:
   4. Assert the policy fires the CORRECT specific rule
      based on conversation context, not the catch-all
 
-Run:
-    SASY_API_KEY_SUFFIX=<suffix> \
+Run (requires SASY_API_KEY in environment):
     pytest tests/test_graph_policy.py -xvs
 """
 
@@ -18,6 +17,11 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+from dotenv import load_dotenv
+
+# Load .env from the demo root so SASY_API_KEY (and friends)
+# set via the Quickstart flow are picked up automatically.
+load_dotenv(Path(__file__).parent.parent / ".env")
 
 # ── sasy setup ──────────────────────────────────────────
 
@@ -25,11 +29,10 @@ import pytest
 @pytest.fixture(scope="module", autouse=True)
 def configure_sasy():
     """Configure sasy to talk to fly.io and upload policy."""
-    suffix = os.environ.get("SASY_API_KEY_SUFFIX")
-    if not suffix:
-        pytest.skip("SASY_API_KEY_SUFFIX not set")
+    api_key = os.environ.get("SASY_API_KEY")
+    if not api_key:
+        pytest.skip("SASY_API_KEY not set")
 
-    api_key = f"demo-key-{suffix}"
     sasy_url = os.environ.get(
         "SASY_URL", "sasy.fly.dev:443"
     )
@@ -155,62 +158,16 @@ def _check_tool(
 # ── Tests ───────────────────────────────────────────────
 
 
-def test_cancel_denied_no_reason():
-    """Cancel with no prior user message → catch-all denial."""
+def test_cancel_denied_no_reservation_lookup():
+    """Cancel without get_reservation_details → guard fires."""
     authorized, reason = _check_tool(
         "cancel_reservation",
         '{"reservation_id": "EHGLP3"}',
         [],
     )
     assert not authorized
-    assert "No valid cancellation reason" in reason
-
-
-def test_cancel_denied_social_event():
-    """User says 'birthday party' → social event rule fires."""
-    user_id = _record_user_message(
-        "I need to cancel because I have a birthday "
-        "party that weekend."
-    )
-    # Record agent tool call depending on user message
-    tool_id = _record_agent_tool_call(
-        "cancel_reservation",
-        '{"reservation_id": "EHGLP3"}',
-        depends_on=[user_id],
-    )
-
-    authorized, reason = _check_tool(
-        "cancel_reservation",
-        '{"reservation_id": "EHGLP3"}',
-        [user_id, tool_id],
-    )
-    assert not authorized, f"Expected denial, got authorized"
-    assert "Social events" in reason, (
-        f"Expected 'Social events' in reason, got: {reason}"
-    )
-
-
-def test_cancel_denied_user_error():
-    """User says 'booked the wrong flight' → user error rule."""
-    user_id = _record_user_message(
-        "I accidentally booked the wrong flight, "
-        "it was a mistake."
-    )
-    tool_id = _record_agent_tool_call(
-        "cancel_reservation",
-        '{"reservation_id": "EHGLP3"}',
-        depends_on=[user_id],
-    )
-
-    authorized, reason = _check_tool(
-        "cancel_reservation",
-        '{"reservation_id": "EHGLP3"}',
-        [user_id, tool_id],
-    )
-    assert not authorized
-    assert "Accidental booking" in reason, (
-        f"Expected 'Accidental booking' in reason, "
-        f"got: {reason}"
+    assert "without reservation details" in reason, (
+        f"Expected guard denial, got: {reason}"
     )
 
 

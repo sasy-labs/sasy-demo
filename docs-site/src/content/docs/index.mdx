@@ -1,5 +1,5 @@
 ---
-title: SASY Policy Demo
+title: SASY Policy Translation and Enforcement Demo
 description: Translate English security policies into enforced Datalog for LLM agents.
 template: splash
 hero:
@@ -11,9 +11,6 @@ hero:
       link: /quickstart/
       icon: right-arrow
       variant: primary
-    - text: Policy Walkthrough
-      link: /policy/walkthrough/
-      variant: minimal
 ---
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
@@ -24,8 +21,10 @@ import { Card, CardGrid } from '@astrojs/starlight/components';
     it into verified Datalog in minutes.
   </Card>
   <Card title="Verify" icon="approve-check">
-    25+ test scenarios, adversarial reviews, and a round-trip
-    audit confirm the translation is correct.
+    Empirical confidence from the
+    [tau2 airline benchmark](/benchmarks/tau2-airline/):
+    translation variants measured against a hand-tuned
+    reference and LLM-judge baselines.
   </Card>
   <Card title="Enforce" icon="seti:lock">
     Upload the policy. Every tool call your agent makes is

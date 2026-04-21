@@ -7,6 +7,10 @@ on:
       - 'docs-site/**'
   workflow_dispatch:
 
+# Deny all by default at workflow level — jobs opt in to the specific
+# scopes they need (principle of least privilege).
+permissions: {}
+
 jobs:
   deploy:
     runs-on: ubuntu-latest

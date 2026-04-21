@@ -1,7 +1,56 @@
-.venv/
+# Byte-compiled / optimized / DLL files
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.egg-info/
+
+# Logs
+.logs/
+**/logs/
+**/*.log
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+
+# Environments
 .env
 !.env.example
+.venv/
+env/
+venv/
+**/*.venv/
+
+# Caches
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.cache/
+
+# uv (current demo convention — not tracked)
 uv.lock
-*.egg-info/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+# Astro / Starlight docs site output covered by docs-site/.gitignore.
+
+# Tau2 large data (simulations, intermediate fixtures)
+tau2-bench/data/tau2/results/final/
+tau2-bench/web/
+tau2-bench/.venv/
+
+# Per-run benchmark outputs (results/ is checked in;
+# output/ is local translation/test scratch)
+benchmarks/tau2-airline/output/
+output/

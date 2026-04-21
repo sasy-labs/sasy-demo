@@ -27,27 +27,32 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+from dotenv import load_dotenv
+
+# Load .env from the demo root so SASY_API_KEY set via the
+# Quickstart flow is picked up automatically.
+load_dotenv(Path(__file__).parent.parent / ".env")
 
 
 @pytest.fixture(scope="module", autouse=True)
 def configure_sasy():
     """Configure sasy (local or cloud via env vars).
 
-    For local: just run the binary, no env vars needed.
-    For cloud: set SASY_API_KEY_SUFFIX.
+    For cloud: set SASY_API_KEY (in .env per Quickstart,
+    or in shell).
+    For local: start ``make serve-airline``; ensure
+    SASY_API_KEY is not set in the environment.
     """
-    suffix = os.environ.get("SASY_API_KEY_SUFFIX")
-    sasy_url = os.environ.get(
-        "SASY_URL", "localhost:10089"
-    )
+    api_key = os.environ.get("SASY_API_KEY")
 
-    if suffix:
-        # Cloud mode
-        api_key = f"demo-key-{suffix}"
+    if api_key:
+        # Cloud mode — SASY_API_KEY present signals cloud target
+        sasy_url = os.environ.get(
+            "SASY_URL", "sasy.fly.dev:443"
+        )
         os.environ.pop("TLS_CA_PATH", None)
         os.environ.pop("TLS_CERT_PATH", None)
         os.environ.pop("TLS_KEY_PATH", None)
-        os.environ["SASY_URL"] = sasy_url
 
         from sasy.auth.hooks import APIKeyAuthHook
         from sasy.config import configure
@@ -173,100 +178,10 @@ def _check(
 
 
 # ── Tests ───────────────────────────────────────────────
-# Each test records a specific user message, then checks
-# cancel_reservation. The assertion verifies that ONLY
-# the correct specific denial rule fires.
 
 
-class TestSocialEventDenial:
-    """User mentions birthday party → only Rule 2."""
-
-    def test_social_event_only(self):
-        uid = _record_user_msg(
-            "I need to cancel because I have a "
-            "birthday party that weekend."
-        )
-        tid = _record_tool_call(
-            "cancel_reservation",
-            '{"reservation_id": "EHGLP3"}',
-            depends_on=[uid],
-        )
-        authorized, reasons = _check(
-            "cancel_reservation",
-            '{"reservation_id": "EHGLP3"}',
-            [uid, tid],
-        )
-        assert not authorized, "Should be denied"
-        assert any(
-            "Social events" in r for r in reasons
-        ), f"Expected 'Social events' in {reasons}"
-        # THIS is the key assertion: the other rules
-        # should NOT fire
-        assert not any(
-            "Accidental booking" in r for r in reasons
-        ), (
-            f"'Accidental booking' should NOT be in "
-            f"reasons: {reasons}"
-        )
-
-
-class TestUserErrorDenial:
-    """User mentions 'wrong flight' → only Rule 1."""
-
-    def test_user_error_only(self):
-        uid = _record_user_msg(
-            "I accidentally booked the wrong flight, "
-            "it was a mistake."
-        )
-        tid = _record_tool_call(
-            "cancel_reservation",
-            '{"reservation_id": "EHGLP3"}',
-            depends_on=[uid],
-        )
-        authorized, reasons = _check(
-            "cancel_reservation",
-            '{"reservation_id": "EHGLP3"}',
-            [uid, tid],
-        )
-        assert not authorized, "Should be denied"
-        assert any(
-            "Accidental booking" in r for r in reasons
-        ), f"Expected 'Accidental booking' in {reasons}"
-        # Social events rule should NOT fire
-        assert not any(
-            "Social events" in r for r in reasons
-        ), (
-            f"'Social events' should NOT be in "
-            f"reasons: {reasons}"
-        )
-
-
-class TestValidReasonAllowed:
-    """User mentions medical emergency → should be ALLOWED."""
-
-    def test_medical_allowed(self):
-        uid = _record_user_msg(
-            "I am sick and my doctor told me I "
-            "cannot travel."
-        )
-        tid = _record_tool_call(
-            "cancel_reservation",
-            '{"reservation_id": "EHGLP3"}',
-            depends_on=[uid],
-        )
-        authorized, reasons = _check(
-            "cancel_reservation",
-            '{"reservation_id": "EHGLP3"}',
-            [uid, tid],
-        )
-        assert authorized, (
-            f"Should be allowed for medical reason, "
-            f"but got denied: {reasons}"
-        )
-
-
-class TestNoReasonCatchAll:
-    """No user message at all → catch-all Rule 3."""
+class TestNoReservationLookup:
+    """No prior get_reservation_details → guard fires."""
 
     def test_no_context_catchall(self):
         authorized, reasons = _check(
@@ -276,9 +191,9 @@ class TestNoReasonCatchAll:
         )
         assert not authorized, "Should be denied"
         assert any(
-            "No valid cancellation reason" in r
+            "without reservation details" in r
             for r in reasons
-        ), f"Expected catch-all reason in {reasons}"
+        ), f"Expected guard denial in {reasons}"
 
 
 class TestLookupAlwaysAllowed:

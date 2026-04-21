@@ -5,8 +5,9 @@ matrices directly against the policy engine, without any
 LLM agent or simulated customer.
 
 Requires: SASY server running (local or cloud).
-Cloud: set SASY_API_KEY_SUFFIX env var.
-Local: run ``make serve-airline``.
+Cloud: set SASY_API_KEY (typically via .env per Quickstart).
+Local: run ``make serve-airline`` and ensure SASY_API_KEY
+is not set in the environment.
 
 Run:
     pytest tests/test_policy_matrix.py -xvs
@@ -34,18 +35,16 @@ from sasy.instrumentation.testing import (
 @pytest.fixture(scope="module", autouse=True)
 def configure_and_upload():
     """Configure sasy and upload the current policy."""
-    suffix = os.environ.get("SASY_API_KEY_SUFFIX")
-    default_url = (
-        "sasy.fly.dev:443" if suffix
-        else "localhost:10089"
-    )
-    sasy_url = os.environ.get("SASY_URL", default_url)
+    api_key = os.environ.get("SASY_API_KEY")
 
     from sasy.auth.hooks import APIKeyAuthHook
     from sasy.config import configure
 
-    if suffix:
-        api_key = f"demo-key-{suffix}"
+    if api_key:
+        # Cloud mode — SASY_API_KEY present signals cloud target
+        sasy_url = os.environ.get(
+            "SASY_URL", "sasy.fly.dev:443"
+        )
         configure(
             url=sasy_url,
             ca_path="",
@@ -209,7 +208,7 @@ class TestGuardRules:
         )
         assert not result.authorized
         assert any(
-            "look up" in r.lower()
+            "without reservation details" in r
             for r in result.reasons
         ), f"Expected guard message: {result.reasons}"
 
@@ -221,7 +220,7 @@ class TestGuardRules:
         )
         assert not result.authorized
         assert any(
-            "look up" in r.lower()
+            "without reservation details" in r
             for r in result.reasons
         ), f"Expected guard message: {result.reasons}"
 

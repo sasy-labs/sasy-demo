@@ -2,6 +2,15 @@
 
 Uses the OpenAI SDK directly (no litellm) with SASY
 reference-monitor authorization checks on every tool call.
+This file is a **manual** instrumentation example —
+dependency edges, event recording, and
+`check_tool_call()` are wired by hand so you can see
+exactly what SASY needs from an agent. For the
+framework-instrumented path (one import + one call to
+`sasy.instrumentation.instrument(tau2=True, ...)`
+handles all of this), see
+`tau2-examples/tau2_examples/cli.py` and the
+tau2-airline benchmark.
 """
 
 from __future__ import annotations

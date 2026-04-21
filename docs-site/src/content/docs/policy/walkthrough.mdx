@@ -7,6 +7,11 @@ import { Tabs, TabItem, Aside, Steps } from '@astrojs/starlight/components';
 
 This page shows the full policy translation
 from English to enforced Datalog, clause by clause.
+The 10-clause policy below is a simplified version
+used by the 9-scenario demo; the full tau2 airline
+reference lives at `tau2-examples/airline/` — see
+the [benchmark](/benchmarks/tau2-airline/) for
+results.
 
 ## Three Representations
 
@@ -55,7 +60,7 @@ from English to enforced Datalog, clause by clause.
     ```
   </TabItem>
   <TabItem label="Datalog">
-    ```datalog
+    ```prolog
     /* C1 */ IsAuthorized(idx) :- Actions(idx, _).
 
     /* C2 */ IsAuthorized(idx) :-
@@ -88,7 +93,7 @@ Datalog rule. Click to expand.
 **English:** "All actions are authorized by default"
 
 **Datalog:**
-```datalog
+```prolog
 IsAuthorized(idx) :- Actions(idx, _).
 ```
 
@@ -111,7 +116,7 @@ about them.
 reservation, regardless of insurance status"
 
 **Datalog:**
-```datalog
+```prolog
 IsAuthorized(idx) :-
     Actions(idx, a),
     IsTool(a, "cancel_reservation"),
@@ -132,7 +137,7 @@ insurance check entirely.
 cancel if the reservation has travel insurance"
 
 **Datalog:**
-```datalog
+```prolog
 IsAuthorized(idx) :-
     Actions(idx, a),
     IsTool(a, "cancel_reservation"),
@@ -152,7 +157,7 @@ of tier.
 has no insurance and the member is not gold"
 
 **Datalog:**
-```datalog
+```prolog
 // @deny_message: Cannot cancel without insurance
 //   unless you are a gold member
 // @suggestion: Consider adding travel insurance
@@ -181,7 +186,7 @@ cancel. Otherwise it could bypass the insurance
 check.
 
 **Datalog:**
-```datalog
+```prolog
 // @deny_message: Look up reservation details first
 // @tool_pattern: cancel_reservation
 Unauthorized(idx) :-
@@ -209,7 +214,7 @@ policies that depend on runtime data.
 by any member"
 
 **Datalog:**
-```datalog
+```prolog
 IsAuthorized(idx) :-
     Actions(idx, a),
     IsTool(a, "update_reservation_flights"),
@@ -226,7 +231,7 @@ IsAuthorized(idx) :-
 be modified by silver or gold members"
 
 **Datalog:**
-```datalog
+```prolog
 IsAuthorized(idx) :-
     Actions(idx, a),
     IsTool(a, "update_reservation_flights"),
@@ -247,7 +252,7 @@ IsAuthorized(idx) :-
 economy reservations for regular members"
 
 **Datalog:**
-```datalog
+```prolog
 // @deny_message: Regular members cannot modify
 //   basic economy reservations
 // @suggestion: Upgrade membership or cabin class
@@ -267,7 +272,7 @@ Unauthorized(idx) :-
 <summary>**C9: Guard — deny modify if not looked up**</summary>
 
 **Datalog:**
-```datalog
+```prolog
 // @deny_message: Look up reservation details first
 // @tool_pattern: update_reservation_flights
 Unauthorized(idx) :-
@@ -284,27 +289,12 @@ reservation details before attempting to modify.
 
 ---
 
-## Truth Table
+## Want a complete real-world translation?
 
-Every combination of attributes was tested:
-
-| Action | Membership | Insurance | Cabin | Decision |
-|--------|-----------|-----------|-------|----------|
-| cancel | gold | no | — | ALLOW |
-| cancel | gold | yes | — | ALLOW |
-| cancel | silver | yes | — | ALLOW |
-| cancel | silver | no | — | **DENY** |
-| cancel | regular | yes | — | ALLOW |
-| cancel | regular | no | — | **DENY** |
-| cancel | unknown | no | — | GUARD_DENY |
-| modify | any | — | economy | ALLOW |
-| modify | silver | — | basic_economy | ALLOW |
-| modify | gold | — | basic_economy | ALLOW |
-| modify | regular | — | basic_economy | **DENY** |
-| modify | unknown | — | unknown | GUARD_DENY |
-
-<Aside type="tip">
-  **GUARD_DENY** means the policy can't decide yet —
-  the agent needs to call `get_reservation_details`
-  first. This is the prerequisite guard in action.
-</Aside>
+The rules above are a minimal pedagogical example.
+For a full Datalog translation of the tau2 airline
+policy — with dependency-graph predicates,
+per-`reservation_id` scoping, and custom C++ functors
+for content matching — see
+[`tau2-examples/airline/airline_policy.dl`](https://github.com/sasy-labs/sasy-demo/blob/main/tau2-examples/airline/airline_policy.dl)
+in the repo.
