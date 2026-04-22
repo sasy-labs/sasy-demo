@@ -23,14 +23,22 @@ import { Steps, Tabs, TabItem, Aside } from '@astrojs/starlight/components';
    cp .env.example .env
    ```
 
-   Edit `.env` and add your keys:
+   The demo uses three API keys. Edit `.env` and fill them in:
+
+   - `OPENAI_API_KEY` — powers the airline agent in the demo scenarios
+     (the LLM acting as a customer-service rep). This is the demo's
+     choice of agent LLM; it's unrelated to SASY policy enforcement.
+   - `SASY_API_KEY` — authenticates to the SASY policy engine. Provided
+     to you separately.
+   - `ANTHROPIC_API_KEY` — **optional**. Only needed if you run
+     `make translate` and want to use your own Anthropic credits instead
+     of the shared server-side key (which is subject to a rate limit).
 
    ```bash
    OPENAI_API_KEY=sk-...
    SASY_API_KEY=demo-key-your-key-here
+   # ANTHROPIC_API_KEY=sk-ant-...   (optional; see above)
    ```
-
-   Your SASY API key is provided separately.
 
 </Steps>
 
