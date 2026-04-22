@@ -31,10 +31,11 @@ setup:
 	@echo "Next: copy .env.example to .env and add your keys"
 
 # ── Primary Policy Translation ─────────────────────
-# Translates policy_english.md + src/demo/ (your agent) → Datalog +
-# C++ functors via the sasy-translate cloud service. Takes ~5–15 min.
-# Writes output/airline_policy.dl, output/airline_functors.cpp,
-# output/agent_summary.md.
+# Translates policy_english.md + src/demo/ (your agent) → Datalog
+# via the sasy-translate cloud service. Takes ~5–15 min. Writes
+# output/airline_policy.dl + output/agent_summary.md, plus
+# output/airline_functors.cpp if the policy needs custom C++
+# helpers (the demo policy doesn't, so the file is omitted).
 UV_RUN_SDK := uv run
 
 # Silence gRPC's noisy INFO/WARN messages (e.g. "FD from fork parent
@@ -45,30 +46,41 @@ export GRPC_VERBOSITY ?= ERROR
 translate:
 	@echo "Translating policy_english.md + src/demo/ → Datalog ..."
 	@$(UV_RUN_SDK) python -c "\
+	import logging; \
+	logging.basicConfig(format='%(message)s'); \
+	logging.getLogger('sasy').setLevel(logging.INFO); \
 	from sasy.policy import translate; \
 	policy = open('policy_english.md').read(); \
-	r = translate(policy, codebase_paths=['src/demo'], codebase_root='.', \
-	    on_progress=lambda s,e: print(f'  {s} ({e:.0f}s)')); \
+	r = translate(policy, codebase_paths=['src/demo']); \
 	r.print_summary(); \
-	r.save_all('output/', base_name='airline'); \
-	print('\nSaved output/airline_policy.dl, output/airline_functors.cpp, output/agent_summary.md')"
+	saved = r.save_all('output/', base_name='airline'); \
+	print('\nSaved: ' + ', '.join(str(p) for p in saved.values()))"
 
 upload-translated:
-	$(UV_RUN_SDK) python -c "from sasy.policy import upload_policy_file; \
-	r = upload_policy_file('output/airline_policy.dl'); \
-	print('Accepted' if r.accepted else f'Failed: {r.error_output}')"
+	@$(UV_RUN_SDK) python -c "\
+	import os; \
+	from sasy.policy import upload_policy_file; \
+	path = 'output/airline_policy.dl'; \
+	size = os.path.getsize(path); \
+	print(f'Uploading {path} ({size:,} bytes) ...'); \
+	r = upload_policy_file(path); \
+	print(f'  ✓ {r.message}' if r.accepted else f'  ✗ Failed: {r.error_output}')"
 
 demo-translated:
+	@echo "→ Swapping policy.dl ← output/airline_policy.dl (translated)"
 	@cp policy.dl policy.dl.bak 2>/dev/null || true
 	@cp output/airline_policy.dl policy.dl
 	$(UV_RUN_SDK) python -m demo.main --all
 	@mv policy.dl.bak policy.dl 2>/dev/null || true
+	@echo "→ Restored hand-written policy.dl"
 
 demo-translated-step:
+	@echo "→ Swapping policy.dl ← output/airline_policy.dl (translated)"
 	@cp policy.dl policy.dl.bak 2>/dev/null || true
 	@cp output/airline_policy.dl policy.dl
 	STEP_MODE=1 $(UV_RUN_SDK) python -m demo.main --all
 	@mv policy.dl.bak policy.dl 2>/dev/null || true
+	@echo "→ Restored hand-written policy.dl"
 
 # ── Policy Upload (hand-written reference) ─────────
 

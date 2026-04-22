@@ -47,16 +47,17 @@ results.
     C4: Deny cancel_reservation if insurance = no
         AND membership != gold
     C5: Guard — deny cancel_reservation if
-        reservation details not looked up
+        insurance unknown AND not gold
     C6: Allow update_reservation_flights if
         cabin = economy
     C7: Allow update_reservation_flights if
-        cabin = basic_economy AND membership
-        in (silver, gold)
+        cabin = basic_economy AND membership != regular
     C8: Deny update_reservation_flights if
         cabin = basic_economy AND membership = regular
     C9: Guard — deny update_reservation_flights if
-        reservation details not looked up
+        cabin unknown
+   C10: Guard — deny update_reservation_flights if
+        cabin = basic_economy AND membership unknown
     ```
   </TabItem>
   <TabItem label="Datalog">
@@ -158,9 +159,10 @@ has no insurance and the member is not gold"
 
 **Datalog:**
 ```prolog
-// @deny_message: Cannot cancel without insurance
-//   unless you are a gold member
-// @suggestion: Consider adding travel insurance
+// @deny_message: Only gold members or members with
+//   travel insurance can cancel reservations
+// @suggestion: Purchase travel insurance or upgrade
+//   to gold membership
 // @tool_pattern: cancel_reservation
 Unauthorized(idx) :-
     Actions(idx, a),
@@ -183,21 +185,29 @@ customer.
 **Why:** The agent must call
 `get_reservation_details` before attempting to
 cancel. Otherwise it could bypass the insurance
-check.
+check. Gold members are exempt — C2 already lets
+them cancel without an insurance lookup, so this
+guard skips them.
 
 **Datalog:**
 ```prolog
-// @deny_message: Look up reservation details first
+// @deny_message: Cannot determine cancellation
+//   eligibility without reservation details
+// @suggestion: Retrieve reservation details
+//   including insurance status
 // @tool_pattern: cancel_reservation
 Unauthorized(idx) :-
     Actions(idx, a),
     IsTool(a, "cancel_reservation"),
     !ToolResultField("get_reservation_details",
-        "insurance", _).
+        "insurance", _),
+    !ToolResultField("get_reservation_details",
+        "membership", "gold").
 ```
 
-The `!ToolResultField(..., _)` checks that the
-lookup hasn't happened yet. This is a
+The two `!ToolResultField(..., _)` conjuncts say:
+the lookup either hasn't happened, or it returned
+something other than gold membership. This is a
 **prerequisite guard** — a common pattern for
 policies that depend on runtime data.
 
@@ -237,11 +247,15 @@ IsAuthorized(idx) :-
     IsTool(a, "update_reservation_flights"),
     ToolResultField("get_reservation_details",
         "cabin", "basic_economy"),
-    ToolResultField("get_reservation_details",
-        "membership", "silver").
-
-/* (similar rule for gold) */
+    !ToolResultField("get_reservation_details",
+        "membership", "regular").
 ```
+
+The membership check is written as a negation
+(*"membership is not regular"*) to cover both
+silver and gold in a single rule. A separate
+`Unauthorized` rule (C8) handles the regular
+case.
 
 </details>
 
@@ -254,8 +268,9 @@ economy reservations for regular members"
 **Datalog:**
 ```prolog
 // @deny_message: Regular members cannot modify
-//   basic economy reservations
-// @suggestion: Upgrade membership or cabin class
+//   basic economy flight reservations
+// @suggestion: Upgrade to silver or gold membership
+//   for modification capability
 // @tool_pattern: update_reservation_flights
 Unauthorized(idx) :-
     Actions(idx, a),
@@ -273,7 +288,10 @@ Unauthorized(idx) :-
 
 **Datalog:**
 ```prolog
-// @deny_message: Look up reservation details first
+// @deny_message: Cannot determine modification
+//   eligibility without reservation details
+// @suggestion: Retrieve reservation details
+//   including cabin class
 // @tool_pattern: update_reservation_flights
 Unauthorized(idx) :-
     Actions(idx, a),
@@ -284,6 +302,34 @@ Unauthorized(idx) :-
 
 Same pattern as C5 — ensures the agent looks up
 reservation details before attempting to modify.
+
+</details>
+
+<details>
+<summary>**C10: Guard — deny basic-economy modify if membership unknown**</summary>
+
+**Why:** C7 only allows basic-economy
+modifications for silver/gold members; C8 only
+denies them for regular members. If membership
+hasn't been looked up yet, neither rule fires —
+this guard closes that gap so the agent can't
+sneak through with a partial lookup.
+
+**Datalog:**
+```prolog
+// @deny_message: Cannot determine modification
+//   eligibility without membership information
+// @suggestion: Verify membership level before
+//   modifying basic economy reservations
+// @tool_pattern: update_reservation_flights
+Unauthorized(idx) :-
+    Actions(idx, a),
+    IsTool(a, "update_reservation_flights"),
+    ToolResultField("get_reservation_details",
+        "cabin", "basic_economy"),
+    !ToolResultField("get_reservation_details",
+        "membership", _).
+```
 
 </details>
 

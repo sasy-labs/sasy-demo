@@ -72,8 +72,10 @@ and runs 9 agent scenarios. You'll see:
   → cancel_reservation(reservation_id=RKLA42)
     [SASY] Consulting policy engine...
     [SASY] ✗ DENIED: cancel_reservation
-    Reason: No insurance, not a gold member
-    → Consider adding travel insurance
+    Reason: Only gold members or members with
+            travel insurance can cancel reservations
+    → Purchase travel insurance or upgrade to
+      gold membership
 
 [Agent] I'm sorry, your reservation cannot be
   cancelled because you don't have travel insurance.
@@ -88,7 +90,12 @@ Soufflé Datalog policy and companion C++ functors:
 <Tabs>
   <TabItem label="SDK">
     ```python
+    import logging
     from sasy.policy import translate
+
+    # See progress while the job runs.
+    logging.basicConfig(format="%(message)s")
+    logging.getLogger("sasy").setLevel(logging.INFO)
 
     with open("policy_english.md") as f:
         policy = f.read()
@@ -96,7 +103,6 @@ Soufflé Datalog policy and companion C++ functors:
     result = translate(
         policy,
         codebase_paths=["src/demo"],  # your agent
-        codebase_root=".",
     )
     result.print_summary()
     result.save_all("output/", base_name="airline")
@@ -110,9 +116,16 @@ Soufflé Datalog policy and companion C++ functors:
 </Tabs>
 
 Translation takes ~5–15 minutes. Writes
-`output/airline_policy.dl`,
-`output/airline_functors.cpp`, and
-`output/agent_summary.md`.
+`output/airline_policy.dl` and
+`output/agent_summary.md`. A companion
+`output/airline_functors.cpp` is written too if
+the policy needs custom C++ helpers (content
+matching, date arithmetic, NLP classifiers); the
+demo policy is pure attribute matching, so no
+functors file is emitted. The richer
+[tau2 airline benchmark](/benchmarks/tau2-airline/)
+policy does produce functors if you want to see
+the feature in practice.
 
 Upload and run the translated policy against the
 scenarios:
@@ -134,8 +147,18 @@ Here's how enforcement works in your own code.
 
 Set `SASY_API_KEY` (and optionally `SASY_URL`) in
 `.env` — the SDK reads them automatically on first
-use. For programmatic overrides, call
-`sasy.config.configure()`.
+use. To override at runtime (different endpoint
+per environment, custom auth hook, etc.):
+
+```python
+from sasy.config import configure
+from sasy.auth.hooks import APIKeyAuthHook
+
+configure(
+    url="sasy.fly.dev:443",
+    auth_hook=APIKeyAuthHook(api_key="..."),
+)
+```
 
 ### 2. Upload
 
@@ -159,29 +182,38 @@ use. For programmatic overrides, call
 ### 3. Check tool calls
 
 Before executing any tool, check with the policy
-engine:
+engine. SASY tracks every recorded message + tool
+call as a node in a **dependency graph**, and
+policies can reason about prior context (e.g.
+*"the agent must call `get_reservation_details`
+before `cancel_reservation`"*). When you check a
+tool call, pass the IDs of the prior events that
+led up to it; the engine walks the graph to
+evaluate guard rules.
 
 ```python
+import json
 from sasy.reference_monitor import check_tool_call
 
+# args is a JSON string (matches what OpenAI / Anthropic
+# tool-use APIs already give you in `tool_call.arguments`).
 auth = check_tool_call(
     fn_name="cancel_reservation",
-    args='{"reservation_id": "RKLA42"}',
-    # Pass the observability event IDs that led up to this
-    # call (user message, prior tool results, etc.) when the
-    # policy depends on message-graph context. For a bare
-    # check with no prior context, pass None or [].
+    args=json.dumps({"reservation_id": "RKLA42"}),
+    # Pass the IDs of prior recorded events (user message,
+    # tool results, etc.) that this call depends on. If you
+    # haven't wired up observability yet, pass None — the
+    # check still works, it just can't enforce graph guards.
     input_node_ids=None,
 )
 
 if auth.authorized:
-    # Execute the tool
-    result = cancel_reservation(reservation_id="RKLA42")
+    # ...invoke the tool the same way you would today...
+    result = my_tools.cancel_reservation(reservation_id="RKLA42")
 else:
-    # Policy denied — show the human-readable
-    # reasons + suggestions. (`auth.denial_trace` carries
-    # the full DenialTrace proto with reason codes and
-    # source locations if you need the structured form.)
+    # Flat surface — see `auth.denial_trace` for the full
+    # structured proto if you need reason codes / source
+    # locations.
     print(f"Denied: {auth.denial_reasons}")
     print(f"Suggestions: {auth.suggestions}")
 ```
@@ -189,7 +221,9 @@ else:
 Every tool call your agent makes goes through
 this check. The policy engine evaluates it against
 the loaded Datalog and returns AUTHORIZED or
-DENIED with a human-readable reason.
+DENIED with a human-readable reason. See [How
+Enforcement Works](/demo/enforcement/) for how
+events are recorded into the graph.
 
 <Aside>
   The demo code in `src/demo/agent.py`
@@ -200,19 +234,42 @@ DENIED with a human-readable reason.
 
 ### 4. Instrument (optional)
 
-For automatic instrumentation of HTTP and agent
-frameworks, one call is enough (auth comes from
-`.env`):
+For automatic instrumentation, one call patches
+the supported frameworks (auth comes from `.env`):
 
 ```python
 import sasy
-
-sasy.instrument()  # patches HTTP, Langroid, etc.
+sasy.instrument()
 ```
 
-This wraps HTTP requests and agent tool calls
-so every action is automatically recorded and
-checked — no manual `check_tool_call` needed.
+`sasy.instrument()` currently patches:
 
-See [How Enforcement Works](/demo/enforcement/)
-for the full flow diagram.
+- `httpx` and `requests` (outbound HTTP — recorded
+  + proxied through SASY for credential injection
+  + policy checks)
+- Langroid (`ChatAgent` tool calls — auto-checked
+  before invocation)
+- Tau2-bench agents (the user-simulator + assistant
+  loops the airline benchmark uses)
+
+After `instrument()`, your existing tool calls
+flow through SASY without code changes:
+
+```python
+import sasy
+import langroid as lr
+
+sasy.instrument()
+
+agent = lr.ChatAgent(lr.ChatAgentConfig(...))
+agent.enable_message(MyTool)
+# Tool calls inside agent.llm_response() are now
+# checked against the loaded policy automatically;
+# denied calls raise (or return a typed error,
+# depending on the integration).
+response = agent.llm_response("cancel my booking")
+```
+
+For a runnable end-to-end example see
+`src/demo/agent.py` in this repo, which wires up
+the airline scenarios with full graph recording.
