@@ -44,17 +44,7 @@ UV_RUN_SDK := uv run
 export GRPC_VERBOSITY ?= ERROR
 
 translate:
-	@echo "Translating policy_english.md + src/demo/ → Datalog ..."
-	@$(UV_RUN_SDK) python -c "\
-	import logging; \
-	logging.basicConfig(format='%(message)s'); \
-	logging.getLogger('sasy').setLevel(logging.INFO); \
-	from sasy.policy import translate; \
-	policy = open('policy_english.md').read(); \
-	r = translate(policy, codebase_paths=['src/demo']); \
-	r.print_summary(); \
-	saved = r.save_all('output/', base_name='airline'); \
-	print('\nSaved: ' + ', '.join(str(p) for p in saved.values()))"
+	@$(UV_RUN_SDK) python -m demo.translate_cli
 
 upload-translated:
 	@$(UV_RUN_SDK) python -c "\
@@ -67,20 +57,10 @@ upload-translated:
 	print(f'  ✓ {r.message}' if r.accepted else f'  ✗ Failed: {r.error_output}')"
 
 demo-translated:
-	@echo "→ Swapping policy.dl ← output/airline_policy.dl (translated)"
-	@cp policy.dl policy.dl.bak 2>/dev/null || true
-	@cp output/airline_policy.dl policy.dl
-	$(UV_RUN_SDK) python -m demo.main --all
-	@mv policy.dl.bak policy.dl 2>/dev/null || true
-	@echo "→ Restored hand-written policy.dl"
+	$(UV_RUN_SDK) python -m demo.main --all --policy-file output/airline_policy.dl
 
 demo-translated-step:
-	@echo "→ Swapping policy.dl ← output/airline_policy.dl (translated)"
-	@cp policy.dl policy.dl.bak 2>/dev/null || true
-	@cp output/airline_policy.dl policy.dl
-	STEP_MODE=1 $(UV_RUN_SDK) python -m demo.main --all
-	@mv policy.dl.bak policy.dl 2>/dev/null || true
-	@echo "→ Restored hand-written policy.dl"
+	STEP_MODE=1 $(UV_RUN_SDK) python -m demo.main --all --policy-file output/airline_policy.dl
 
 # ── Policy Upload (hand-written reference) ─────────
 
@@ -160,16 +140,10 @@ upload-compiled:
 	print('Accepted' if r.accepted else f'Failed: {r.error_output}')"
 
 demo-compiled:
-	@cp policy.dl policy.dl.bak 2>/dev/null || true
-	@cp policy_compiled.dl policy.dl
-	$(UV_RUN_SDK) python -m demo.main --all
-	@mv policy.dl.bak policy.dl 2>/dev/null || true
+	$(UV_RUN_SDK) python -m demo.main --all --policy-file policy_compiled.dl
 
 demo-compiled-step:
-	@cp policy.dl policy.dl.bak 2>/dev/null || true
-	@cp policy_compiled.dl policy.dl
-	STEP_MODE=1 $(UV_RUN_SDK) python -m demo.main --all
-	@mv policy.dl.bak policy.dl 2>/dev/null || true
+	STEP_MODE=1 $(UV_RUN_SDK) python -m demo.main --all --policy-file policy_compiled.dl
 
 # ── Validation ─────────────────────────────────────
 

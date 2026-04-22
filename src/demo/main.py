@@ -59,6 +59,18 @@ def _parse_args() -> argparse.Namespace:
         help="Skip policy upload (use already-uploaded policy)",
     )
     parser.add_argument(
+        "--policy-file",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help=(
+            "Path to the .dl policy to upload "
+            "(default: <repo>/policy.dl). Useful for running "
+            "scenarios against a translated or alternate policy "
+            "without mutating the tracked reference file."
+        ),
+    )
+    parser.add_argument(
         "--model",
         default=OPENAI_MODEL,
         help=f"OpenAI model (default: {OPENAI_MODEL})",
@@ -102,10 +114,17 @@ def main() -> None:
     if not args.skip_upload:
         from sasy.policy import upload_policy_file
 
+        repo_root = Path(__file__).parent.parent.parent
         policy_path = (
-            Path(__file__).parent.parent.parent
-            / "policy.dl"
+            args.policy_file
+            if args.policy_file is not None
+            else repo_root / "policy.dl"
         )
+        if not policy_path.exists():
+            print(
+                f"ERROR: policy file not found: {policy_path}"
+            )
+            sys.exit(1)
         print(f"Uploading policy from {policy_path} ...")
         try:
             resp = upload_policy_file(policy_path)
