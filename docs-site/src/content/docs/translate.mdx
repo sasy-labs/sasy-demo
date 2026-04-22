@@ -126,7 +126,7 @@ This produces `output/original_{1..N}/` and `output/paraphrase_{1..N}/`, each wi
 
 ## Experimental: extended policy validation
 
-A second translator (`sasy.policy.write_policy`) is available as a prototype for extended policy validation — it emits a truth table and adversarial verifier checks alongside the Datalog. Useful for short, self-contained policies but **not recommended** for production agents. It does not read a codebase. Use `translate` for anything non-trivial. See the [confidence report](/policy/confidence/) for how to read the verification artifacts it emits.
+A second translator (`sasy.policy.write_policy`) is available as a prototype for extended policy validation. It emits a truth table and adversarial verifier checks alongside the Datalog; see the [confidence report](/policy/confidence/) for how to read them. `write_policy` is useful for short, self-contained policies but **not recommended** for production agents — it does not read a codebase, so use `translate` for anything non-trivial.
 
 ```python
 from sasy.policy import write_policy  # experimental
