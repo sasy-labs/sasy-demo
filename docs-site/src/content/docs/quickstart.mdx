@@ -217,9 +217,11 @@ call as a node in a **dependency graph**, and
 policies can reason about prior context (e.g.
 *"the agent must call `get_reservation_details`
 before `cancel_reservation`"*). When you check a
-tool call, pass the IDs of the prior events that
-led up to it; the engine walks the graph to
-evaluate guard rules.
+tool call, pass the IDs of the events that
+**directly initiated** it — typically just the
+LLM message that chose this tool. The engine
+walks the graph backward from those seeds to
+reach the full ancestry it needs for guard rules.
 
 ```python
 import json
@@ -230,10 +232,10 @@ from sasy.reference_monitor import check_tool_call
 auth = check_tool_call(
     fn_name="cancel_reservation",
     args=json.dumps({"reservation_id": "RKLA42"}),
-    # Pass the IDs of prior recorded events (user message,
-    # tool results, etc.) that this call depends on. If you
-    # haven't wired up observability yet, pass None — the
-    # check still works, it just can't enforce graph guards.
+    # Events that directly initiated this call (usually
+    # the LLM message that chose it). Pass None if no
+    # events are recorded — the check still works, but
+    # graph-dependent guards can't fire.
     input_node_ids=None,
 )
 
