@@ -51,7 +51,8 @@ in action:
 <Aside>
   Want the Python integration pattern (what this looks like inside
   your own agent code) instead of the shell scripts? See
-  [Enforce a Policy](#enforce-a-policy) below.
+  [Integrate SASY in Your Own Agent](#integrate-sasy-in-your-own-agent)
+  below.
 </Aside>
 
 <Tabs>
@@ -70,11 +71,16 @@ in action:
     ```bash
     make scenario-1
     ```
+    Scenarios 1–9 are available (`make scenario-2`,
+    … `make scenario-9`). See [Scenarios](/demo/scenarios/)
+    for what each covers.
   </TabItem>
 </Tabs>
 
-This uploads `policy.dl` to the SASY policy engine
-and runs 9 agent scenarios. You'll see:
+Each of these uploads `policy.dl` to the SASY
+policy engine and runs one or more agent scenarios
+(`make demo` and `make demo-step` run all nine;
+`make scenario-N` runs just that one). You'll see:
 
 ```
 [Customer] Hi, I need to cancel reservation RKLA42.
@@ -97,9 +103,18 @@ and runs 9 agent scenarios. You'll see:
 
 ## Translate a Policy
 
+The demo above ran against a hand-written Datalog
+policy (`policy.dl`) shipped with the repo — fine
+for the walkthrough, but not how you'd author one
+from scratch. For your own agent, the typical
+workflow is to write the policy in **English** and
+let SASY compile it to Datalog for you. Here's how:
+
 Write your policy in English (plus point the
 translator at your agentic codebase) and get back a
-Soufflé Datalog policy and companion C++ functors:
+Soufflé Datalog policy, plus a companion C++
+functors file if the policy needs custom helpers
+(see below):
 
 <Tabs>
   <TabItem label="SDK">
@@ -153,9 +168,9 @@ See [Translate a Policy](/translate/) for the full
 API and the [tau2 airline benchmark](/benchmarks/tau2-airline/)
 for empirical results.
 
-## Enforce a Policy
+## Integrate SASY in Your Own Agent
 
-Here's how enforcement works in your own code.
+Here's how to wire the SDK into your own agent code.
 
 ### 1. Configure
 
