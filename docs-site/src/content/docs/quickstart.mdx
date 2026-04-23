@@ -224,6 +224,12 @@ traverses the graph backward from those events
 to reach the full ancestry it needs for guard
 rules.
 
+Events and their dependencies land in the graph
+either automatically (via `sasy.instrument()`,
+covered below) or manually (via
+`sasy.observability.record_events_with_dependencies()`
+for frameworks `instrument()` doesn't cover).
+
 ```python
 import json
 from sasy.reference_monitor import check_tool_call
