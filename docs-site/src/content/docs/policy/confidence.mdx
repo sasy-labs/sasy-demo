@@ -5,18 +5,28 @@ description: Truth-table + verifier artifacts produced by the experimental polic
 
 import { Aside } from '@astrojs/starlight/components';
 
-This page describes the artifacts produced by the
-experimental policy translator
-(`sasy.policy.write_policy`) — a prototype for
-extended validation that generates a truth table and
-adversarial verifier checks alongside the Datalog. It
-does not read your agent's codebase, so the primary
-[`translate`](/translate/) flow is usually a better
-fit.
+SASY provides two policy-translation pipelines with
+complementary goals:
 
-When you translate a policy with `write_policy()`,
-the result includes a verification report. Here's
-how to read it.
+- The primary [`translate()`](/translate/) flow
+  takes an English spec **plus your agent's
+  codebase** and produces a Datalog policy targeted
+  at your code. Reach for it when you're authoring
+  a policy against real tool names, field names,
+  and message-graph predicates.
+- The experimental `write_policy()` flow focuses
+  on **validating the translation itself**. It
+  generates a truth table and runs adversarial
+  verifier checks so you can gain confidence that
+  the English → Datalog mapping is faithful. It
+  doesn't read your codebase, so it's a better fit
+  for short self-contained policies where the
+  assurance artifacts are the point.
+
+This page describes how to read the output of the
+`write_policy()` flow. Its result object carries a
+`print_summary()` method that renders a verification
+report — here's how to interpret each section.
 
 ## The Summary
 

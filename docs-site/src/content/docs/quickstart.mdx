@@ -273,8 +273,13 @@ events are recorded into the graph.
 
 ### 4. Instrument (optional)
 
-For automatic instrumentation, one call patches
-the supported frameworks (auth comes from `.env`):
+The §3 example required threading `check_tool_call`
+by hand before every tool invocation. For supported
+agent frameworks, SASY can do that wiring itself —
+one line of setup and your existing code flows
+through the policy engine with no per-call changes
+(both the graph recording and the policy check get
+patched in). Auth comes from `.env`:
 
 ```python
 import sasy
@@ -291,8 +296,12 @@ sasy.instrument()
 - Tau2-bench agents (the user-simulator + assistant
   loops the airline benchmark uses)
 
-After `instrument()`, your existing tool calls
-flow through SASY without code changes:
+After `instrument()`, existing tool calls on any
+of the patched frameworks flow through SASY without
+code changes. The example below uses Langroid; the
+same `sasy.instrument()` call covers plain `httpx` /
+`requests` and Tau2-bench agents too — no framework
+switch needed.
 
 ```python
 import sasy
