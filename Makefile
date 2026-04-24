@@ -15,7 +15,8 @@
 
 .PHONY: setup \
         translate upload-translated demo-translated demo-translated-step \
-        translate-experimental upload-compiled demo-compiled demo-compiled-step \
+        translate-experimental upload-translated-experimental \
+        demo-translated-experimental demo-translated-experimental-step \
         demo demo-step upload \
         scenario-1 scenario-2 scenario-3 \
         scenario-4 scenario-5 scenario-6 \
@@ -123,6 +124,7 @@ scenario-3-step:
 # codebase awareness. See docs-site /policy/confidence.
 
 translate-experimental:
+	@mkdir -p output
 	@echo "Translating policy_english.md → Datalog (experimental) ..."
 	@uv run python -c "\
 	from sasy.policy import write_policy; \
@@ -130,20 +132,20 @@ translate-experimental:
 	r = write_policy(policy=policy, poll_interval=15.0, \
 	    on_progress=lambda s,e: print(f'  {s} ({e:.0f}s)')); \
 	r.print_summary(); \
-	r.save_datalog('policy_compiled.dl'); \
-	r.save_truth_table('truth_table.tsv'); \
-	print(f'\nSaved: policy_compiled.dl, truth_table.tsv')"
+	r.save_datalog('output/airline_policy_experimental.dl'); \
+	r.save_truth_table('output/truth_table.tsv'); \
+	print(f'\nSaved: output/airline_policy_experimental.dl, output/truth_table.tsv')"
 
-upload-compiled:
+upload-translated-experimental:
 	@uv run python -c "from sasy.policy import upload_policy_file; \
-	r = upload_policy_file('policy_compiled.dl'); \
+	r = upload_policy_file('output/airline_policy_experimental.dl'); \
 	print('Accepted' if r.accepted else f'Failed: {r.error_output}')"
 
-demo-compiled:
-	$(UV_RUN_SDK) python -m demo.main --all --policy-file policy_compiled.dl
+demo-translated-experimental:
+	$(UV_RUN_SDK) python -m demo.main --all --policy-file output/airline_policy_experimental.dl
 
-demo-compiled-step:
-	STEP_MODE=1 $(UV_RUN_SDK) python -m demo.main --all --policy-file policy_compiled.dl
+demo-translated-experimental-step:
+	STEP_MODE=1 $(UV_RUN_SDK) python -m demo.main --all --policy-file output/airline_policy_experimental.dl
 
 # ── Validation ─────────────────────────────────────
 

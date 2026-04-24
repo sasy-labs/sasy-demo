@@ -91,7 +91,7 @@ airline demo policy:
 <Aside>
   The full truth table is saved as a TSV file. Open
   it in a spreadsheet to review every scenario:
-  `result.save_truth_table("truth_table.tsv")`
+  `result.save_truth_table("output/truth_table.tsv")`
 </Aside>
 
 ### Assertions (25/25 passed)
@@ -168,26 +168,28 @@ resolve any ambiguities.
 
 The demo repo ships Makefile targets for the
 `write_policy` path. They translate
-`policy_english.md`, save the artifacts to the
-repo root, and run the 9-scenario demo against the
-compiled policy.
+`policy_english.md`, save the artifacts under
+`output/`, and run the 9-scenario demo against the
+translated policy.
 
 ```bash
-# English → Datalog (produces policy_compiled.dl + truth_table.tsv)
+# English → Datalog (writes output/airline_policy_experimental.dl
+# + output/truth_table.tsv)
 make translate-experimental
 
-# Upload + run the 9 scenarios against the compiled policy
-make demo-compiled
+# Upload + run the 9 scenarios against the experimental policy
+make demo-translated-experimental
 
 # Interactive stepwise variant
-make demo-compiled-step
+make demo-translated-experimental-step
 
-# Upload the compiled policy only (no demo run)
-make upload-compiled
+# Upload the experimental policy only (no demo run)
+make upload-translated-experimental
 ```
 
-`make demo-compiled` swaps `policy_compiled.dl`
-into `policy.dl` for the demo run, then restores
-the original. Use `make demo` to run against the
+`make demo-translated-experimental` passes
+`output/airline_policy_experimental.dl` as the
+`--policy-file` argument — the tracked `policy.dl`
+is not modified. Use `make demo` to run against the
 hand-written reference policy that ships with the
 repo.
