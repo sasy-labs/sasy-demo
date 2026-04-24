@@ -251,6 +251,21 @@ def display_policy_allowed(fn_name: str) -> None:
     _pause()
 
 
+def display_tool_error(fn_name: str, error_msg: str) -> None:
+    """Print a red TOOL ERROR line for tool-side failures.
+
+    Used when the policy authorized the call but the tool itself
+    raised — e.g. a booking with no available seats. The agent sees
+    the error as a structured result and typically recovers.
+    """
+    print(
+        f"{_RED}{_BOLD}"
+        f"    [Tool error] {fn_name}: {error_msg}"
+        f"{_RESET}"
+    )
+    _pause()
+
+
 def display_policy_denied(
     fn_name: str,
     reason: str,
