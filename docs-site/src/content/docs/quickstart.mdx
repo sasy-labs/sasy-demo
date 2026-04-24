@@ -51,7 +51,8 @@ in action:
 <Aside>
   Want the Python integration pattern (what this looks like inside
   your own agent code) instead of the shell scripts? See
-  [Enforce a Policy](#enforce-a-policy) below.
+  [Integrate SASY in Your Own Agent](#integrate-sasy-in-your-own-agent)
+  below.
 </Aside>
 
 <Tabs>
@@ -70,11 +71,16 @@ in action:
     ```bash
     make scenario-1
     ```
+    Scenarios 1–9 are available (`make scenario-2`,
+    … `make scenario-9`). See [Scenarios](/demo/scenarios/)
+    for what each covers.
   </TabItem>
 </Tabs>
 
-This uploads `policy.dl` to the SASY policy engine
-and runs 9 agent scenarios. You'll see:
+Each of these uploads `policy.dl` to the SASY
+policy engine and runs one or more agent scenarios
+(`make demo` and `make demo-step` run all nine;
+`make scenario-N` runs just that one). You'll see:
 
 ```
 [Customer] Hi, I need to cancel reservation RKLA42.
@@ -97,9 +103,19 @@ and runs 9 agent scenarios. You'll see:
 
 ## Translate a Policy
 
+The demo above ran against a hand-written Datalog
+policy (`policy.dl`) shipped with the repo — fine
+for the walkthrough, but not how you'd author one
+from scratch. For your own agent, the typical
+workflow is to write the policy in **English** and
+let SASY translate it to Datalog for you. Here's
+how:
+
 Write your policy in English (plus point the
 translator at your agentic codebase) and get back a
-Soufflé Datalog policy and companion C++ functors:
+Soufflé Datalog policy, plus a companion C++
+functors file if the policy needs custom helpers
+(see below):
 
 <Tabs>
   <TabItem label="SDK">
@@ -153,9 +169,9 @@ See [Translate a Policy](/translate/) for the full
 API and the [tau2 airline benchmark](/benchmarks/tau2-airline/)
 for empirical results.
 
-## Enforce a Policy
+## Integrate SASY in Your Own Agent
 
-Here's how enforcement works in your own code.
+Here's how to wire the SDK into your own agent code.
 
 ### 1. Configure
 
@@ -201,9 +217,18 @@ call as a node in a **dependency graph**, and
 policies can reason about prior context (e.g.
 *"the agent must call `get_reservation_details`
 before `cancel_reservation`"*). When you check a
-tool call, pass the IDs of the prior events that
-led up to it; the engine walks the graph to
-evaluate guard rules.
+tool call, pass the IDs of the events that
+**directly initiated** it — typically just the
+LLM message that chose this tool. The engine
+traverses the graph backward from those events
+to reach the full ancestry it needs for guard
+rules.
+
+Events and their dependencies land in the graph
+either automatically (via `sasy.instrument()`,
+covered below) or manually (via
+`sasy.observability.record_events_with_dependencies()`
+for frameworks `instrument()` doesn't cover).
 
 ```python
 import json
@@ -214,10 +239,10 @@ from sasy.reference_monitor import check_tool_call
 auth = check_tool_call(
     fn_name="cancel_reservation",
     args=json.dumps({"reservation_id": "RKLA42"}),
-    # Pass the IDs of prior recorded events (user message,
-    # tool results, etc.) that this call depends on. If you
-    # haven't wired up observability yet, pass None — the
-    # check still works, it just can't enforce graph guards.
+    # Events that directly initiated this call (usually
+    # the LLM message that chose it). Pass None if no
+    # events are recorded — the check still works, but
+    # graph-dependent guards can't fire.
     input_node_ids=None,
 )
 
@@ -248,8 +273,13 @@ events are recorded into the graph.
 
 ### 4. Instrument (optional)
 
-For automatic instrumentation, one call patches
-the supported frameworks (auth comes from `.env`):
+The §3 example required threading `check_tool_call`
+by hand before every tool invocation. For supported
+agent frameworks, SASY can do that wiring itself —
+one line of setup and your existing code flows
+through the policy engine with no per-call changes
+(both the graph recording and the policy check get
+patched in). Auth comes from `.env`:
 
 ```python
 import sasy
@@ -258,16 +288,22 @@ sasy.instrument()
 
 `sasy.instrument()` currently patches:
 
-- `httpx` and `requests` (outbound HTTP — recorded
-  + proxied through SASY for credential injection
-  + policy checks)
-- Langroid (`ChatAgent` tool calls — auto-checked
-  before invocation)
-- Tau2-bench agents (the user-simulator + assistant
-  loops the airline benchmark uses)
+- `httpx` and `requests` — outbound HTTP requests are
+  recorded into the graph and proxied through SASY
+  for credential injection and policy checks.
+- Langroid — `ChatAgent` and `Task` messages, tool
+  calls, and their dependency edges are recorded;
+  tool calls are auto-checked before invocation.
+- Tau2-bench agents — user-simulator and assistant
+  messages, tool calls, and results are recorded
+  (with dependencies); tool calls are auto-checked.
 
-After `instrument()`, your existing tool calls
-flow through SASY without code changes:
+After `instrument()`, existing tool calls on any
+of the patched frameworks flow through SASY without
+code changes. The example below uses Langroid; the
+same `sasy.instrument()` call covers plain `httpx` /
+`requests` and Tau2-bench agents too — no framework
+switch needed.
 
 ```python
 import sasy
@@ -277,11 +313,9 @@ sasy.instrument()
 
 agent = lr.ChatAgent(lr.ChatAgentConfig(...))
 agent.enable_message(MyTool)
-# Tool calls inside agent.llm_response() are now
-# checked against the loaded policy automatically;
-# denied calls raise (or return a typed error,
-# depending on the integration).
-response = agent.llm_response("cancel my booking")
+# Every tool call is checked against the loaded
+# policy automatically.
+result = lr.Task(agent).run("cancel my booking")
 ```
 
 For a runnable end-to-end example see

@@ -1,14 +1,14 @@
 """Core agent loop for the airline demo.
 
-Uses the OpenAI SDK directly (no litellm) with SASY
+Drives a tool-using OpenAI chat loop with SASY
 reference-monitor authorization checks on every tool call.
 This file is a **manual** instrumentation example —
 dependency edges, event recording, and
 `check_tool_call()` are wired by hand so you can see
 exactly what SASY needs from an agent. For the
-framework-instrumented path (one import + one call to
-`sasy.instrumentation.instrument(tau2=True, ...)`
-handles all of this), see
+framework-instrumented path (a single call to
+`sasy.instrument()` handles all of this for supported
+frameworks — Langroid, tau2-bench, httpx/requests), see
 `tau2-examples/tau2_examples/cli.py` and the
 tau2-airline benchmark.
 """
@@ -46,6 +46,7 @@ from .display import (
     display_scenario_header,
     display_summary,
     display_tool_call,
+    display_tool_error,
     display_tool_result,
     display_user,
 )
@@ -382,7 +383,22 @@ def execute_tool(
     """
     args: dict[str, Any] = json.loads(args_json)
     method = getattr(airline_tools, fn_name)
-    result = method(**args)
+    try:
+        result = method(**args)
+    except Exception as exc:
+        # Tool-side failures (bad input, unavailable seat, missing
+        # record, …) shouldn't crash the scenario runner. Surface the
+        # error visibly to the reader, then hand a structured error
+        # back to the LLM so it can recover (try a different cabin,
+        # pick another flight, tell the customer, …).
+        error_msg = str(exc)
+        display_tool_error(fn_name, error_msg)
+        return json.dumps(
+            {
+                "error": type(exc).__name__,
+                "message": error_msg,
+            }
+        )
     # Pydantic models must be serialized as proper JSON
     # (not repr) so policy functors like @extract_cabin
     # can parse tool result contents.

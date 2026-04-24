@@ -10,10 +10,15 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import threading
+import time
 from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
+from rich.console import Console, ConsoleOptions, RenderResult
+from rich.live import Live
+from rich.spinner import Spinner
 
 # Load .env from the demo root (two levels up from this file)
 _demo_root = Path(__file__).resolve().parent.parent.parent
@@ -59,6 +64,18 @@ def _parse_args() -> argparse.Namespace:
         help="Skip policy upload (use already-uploaded policy)",
     )
     parser.add_argument(
+        "--policy-file",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help=(
+            "Path to the .dl policy to upload "
+            "(default: <repo>/policy.dl). Useful for running "
+            "scenarios against a translated or alternate policy "
+            "without mutating the tracked reference file."
+        ),
+    )
+    parser.add_argument(
         "--model",
         default=OPENAI_MODEL,
         help=f"OpenAI model (default: {OPENAI_MODEL})",
@@ -69,6 +86,67 @@ def _parse_args() -> argparse.Namespace:
         help="Interactive mode: pause between stages",
     )
     return parser.parse_args()
+
+
+class _UploadStatus:
+    """Renderable that ticks elapsed mm:ss on every Live refresh.
+
+    Decoupled from the upload thread so the timer keeps moving even
+    when the gRPC call is mid-flight (no log events to drive it,
+    unlike the translate_cli spinner).
+    """
+
+    def __init__(self, label: str, start: float) -> None:
+        self._label = label
+        self._start = start
+        self._spinner = Spinner("dots", text="")
+
+    def __rich_console__(
+        self, console: Console, options: ConsoleOptions
+    ) -> RenderResult:
+        elapsed = int(time.monotonic() - self._start)
+        mm, ss = divmod(elapsed, 60)
+        self._spinner.update(text=f"{self._label} ({mm:02d}:{ss:02d})")
+        yield self._spinner
+
+
+def _upload_with_spinner(policy_path: Path, console: Console):
+    """Run upload_policy_file in a worker thread; spin while we wait.
+
+    The SDK call is a blocking gRPC RPC that takes 1–2 minutes for the
+    policy compile + worker pool spawn. Without a heartbeat the user
+    reasonably thinks the demo has hung (issue #9 finding 2).
+    """
+    from sasy.config import get_config
+    from sasy.policy import upload_policy_file
+
+    url = get_config().url
+    label = (
+        f"Uploading {policy_path.name} → SASY policy engine ({url})…"
+    )
+    holder: dict[str, Any] = {}
+
+    def worker() -> None:
+        try:
+            holder["resp"] = upload_policy_file(policy_path)
+        except Exception as exc:
+            holder["error"] = exc
+
+    t = threading.Thread(target=worker, daemon=True)
+    t.start()
+
+    start = time.monotonic()
+    with Live(
+        _UploadStatus(label, start),
+        console=console,
+        refresh_per_second=4,
+        transient=True,
+    ):
+        t.join()
+
+    if "error" in holder:
+        raise holder["error"]
+    return holder["resp"]
 
 
 def main() -> None:
@@ -99,30 +177,34 @@ def main() -> None:
     # from the env automatically.
 
     # ── Upload policy ────────────────────────────────
+    console = Console()
     if not args.skip_upload:
-        from sasy.policy import upload_policy_file
-
+        repo_root = Path(__file__).parent.parent.parent
         policy_path = (
-            Path(__file__).parent.parent.parent
-            / "policy.dl"
+            args.policy_file
+            if args.policy_file is not None
+            else repo_root / "policy.dl"
         )
-        print(f"Uploading policy from {policy_path} ...")
+        if not policy_path.exists():
+            print(
+                f"ERROR: policy file not found: {policy_path}"
+            )
+            sys.exit(1)
         try:
-            resp = upload_policy_file(policy_path)
-            if resp.accepted:
-                print(
-                    f"Policy uploaded: {resp.message}"
-                )
-            else:
-                print(
-                    f"Policy upload failed: "
-                    f"{resp.message}"
-                )
-                if resp.error_output:
-                    print(resp.error_output)
-                sys.exit(1)
+            resp = _upload_with_spinner(policy_path, console)
         except Exception as exc:
-            print(f"Policy upload error: {exc}")
+            console.print(f"[red]Policy upload error:[/red] {exc}")
+            sys.exit(1)
+        if resp.accepted:
+            console.print(
+                f"[green]✓[/green] Policy uploaded: {resp.message}"
+            )
+        else:
+            console.print(
+                f"[red]✗ Policy upload failed:[/red] {resp.message}"
+            )
+            if resp.error_output:
+                console.print(resp.error_output)
             sys.exit(1)
 
         if args.upload_only:

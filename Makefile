@@ -15,7 +15,8 @@
 
 .PHONY: setup \
         translate upload-translated demo-translated demo-translated-step \
-        translate-experimental upload-compiled demo-compiled demo-compiled-step \
+        translate-experimental upload-translated-experimental \
+        demo-translated-experimental demo-translated-experimental-step \
         demo demo-step upload \
         scenario-1 scenario-2 scenario-3 \
         scenario-4 scenario-5 scenario-6 \
@@ -44,17 +45,7 @@ UV_RUN_SDK := uv run
 export GRPC_VERBOSITY ?= ERROR
 
 translate:
-	@echo "Translating policy_english.md + src/demo/ → Datalog ..."
-	@$(UV_RUN_SDK) python -c "\
-	import logging; \
-	logging.basicConfig(format='%(message)s'); \
-	logging.getLogger('sasy').setLevel(logging.INFO); \
-	from sasy.policy import translate; \
-	policy = open('policy_english.md').read(); \
-	r = translate(policy, codebase_paths=['src/demo']); \
-	r.print_summary(); \
-	saved = r.save_all('output/', base_name='airline'); \
-	print('\nSaved: ' + ', '.join(str(p) for p in saved.values()))"
+	@$(UV_RUN_SDK) python -m demo.translate_cli
 
 upload-translated:
 	@$(UV_RUN_SDK) python -c "\
@@ -67,20 +58,10 @@ upload-translated:
 	print(f'  ✓ {r.message}' if r.accepted else f'  ✗ Failed: {r.error_output}')"
 
 demo-translated:
-	@echo "→ Swapping policy.dl ← output/airline_policy.dl (translated)"
-	@cp policy.dl policy.dl.bak 2>/dev/null || true
-	@cp output/airline_policy.dl policy.dl
-	$(UV_RUN_SDK) python -m demo.main --all
-	@mv policy.dl.bak policy.dl 2>/dev/null || true
-	@echo "→ Restored hand-written policy.dl"
+	$(UV_RUN_SDK) python -m demo.main --all --policy-file output/airline_policy.dl
 
 demo-translated-step:
-	@echo "→ Swapping policy.dl ← output/airline_policy.dl (translated)"
-	@cp policy.dl policy.dl.bak 2>/dev/null || true
-	@cp output/airline_policy.dl policy.dl
-	STEP_MODE=1 $(UV_RUN_SDK) python -m demo.main --all
-	@mv policy.dl.bak policy.dl 2>/dev/null || true
-	@echo "→ Restored hand-written policy.dl"
+	STEP_MODE=1 $(UV_RUN_SDK) python -m demo.main --all --policy-file output/airline_policy.dl
 
 # ── Policy Upload (hand-written reference) ─────────
 
@@ -143,6 +124,7 @@ scenario-3-step:
 # codebase awareness. See docs-site /policy/confidence.
 
 translate-experimental:
+	@mkdir -p output
 	@echo "Translating policy_english.md → Datalog (experimental) ..."
 	@uv run python -c "\
 	from sasy.policy import write_policy; \
@@ -150,26 +132,20 @@ translate-experimental:
 	r = write_policy(policy=policy, poll_interval=15.0, \
 	    on_progress=lambda s,e: print(f'  {s} ({e:.0f}s)')); \
 	r.print_summary(); \
-	r.save_datalog('policy_compiled.dl'); \
-	r.save_truth_table('truth_table.tsv'); \
-	print(f'\nSaved: policy_compiled.dl, truth_table.tsv')"
+	r.save_datalog('output/airline_policy_experimental.dl'); \
+	r.save_truth_table('output/truth_table.tsv'); \
+	print(f'\nSaved: output/airline_policy_experimental.dl, output/truth_table.tsv')"
 
-upload-compiled:
+upload-translated-experimental:
 	@uv run python -c "from sasy.policy import upload_policy_file; \
-	r = upload_policy_file('policy_compiled.dl'); \
+	r = upload_policy_file('output/airline_policy_experimental.dl'); \
 	print('Accepted' if r.accepted else f'Failed: {r.error_output}')"
 
-demo-compiled:
-	@cp policy.dl policy.dl.bak 2>/dev/null || true
-	@cp policy_compiled.dl policy.dl
-	$(UV_RUN_SDK) python -m demo.main --all
-	@mv policy.dl.bak policy.dl 2>/dev/null || true
+demo-translated-experimental:
+	$(UV_RUN_SDK) python -m demo.main --all --policy-file output/airline_policy_experimental.dl
 
-demo-compiled-step:
-	@cp policy.dl policy.dl.bak 2>/dev/null || true
-	@cp policy_compiled.dl policy.dl
-	STEP_MODE=1 $(UV_RUN_SDK) python -m demo.main --all
-	@mv policy.dl.bak policy.dl 2>/dev/null || true
+demo-translated-experimental-step:
+	STEP_MODE=1 $(UV_RUN_SDK) python -m demo.main --all --policy-file output/airline_policy_experimental.dl
 
 # ── Validation ─────────────────────────────────────
 

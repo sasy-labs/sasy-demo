@@ -23,14 +23,14 @@ the SASY policy engine before execution.
 
 3. **SASY checks the policy**
 
-   Before the tool executes, SASY evaluates the
-   call against the loaded Datalog policy. It
-   checks:
-
-   - Is this tool on the allowlist?
-   - Are there any `Unauthorized` rules that match?
-   - Has the required prerequisite data been
-     looked up?
+   SASY evaluates the call against the loaded
+   Datalog. For `get_reservation_details(RKLA42)`,
+   the demo's default-allow rule
+   (`IsAuthorized(idx) :- Actions(idx, _).`) fires,
+   and no `Unauthorized` rule targets this tool —
+   so the call is authorized. If any `Unauthorized`
+   rule had matched, it would have overridden the
+   default; denials win on conflict.
 
 4. **Decision: AUTHORIZED or DENIED**
 
@@ -74,36 +74,6 @@ The agent receives a structured denial:
 ```
 
 The agent can use these to craft a helpful response.
-
-## Prerequisite Guards
-
-Some policy rules depend on data that must be
-looked up first. For example, the cancellation
-policy checks `insurance` and `membership` — but
-these fields only exist after
-`get_reservation_details` is called.
-
-**Guard rules** enforce this ordering:
-
-```
-Agent: cancel_reservation(RKLA42)
-SASY:  ✗ DENIED — look up reservation details first
-Agent: get_reservation_details(RKLA42)
-SASY:  ✓ AUTHORIZED
-Agent: cancel_reservation(RKLA42)
-SASY:  ✓ AUTHORIZED (insurance=yes)
-```
-
-The agent naturally retries after the lookup,
-and the second attempt succeeds because the
-required data is now available.
-
-<Aside type="tip">
-  Guards prevent the agent from making decisions
-  without sufficient context. They're generated
-  automatically when the policy depends on tool
-  result fields.
-</Aside>
 
 ## Observability
 

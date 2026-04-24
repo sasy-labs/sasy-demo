@@ -40,7 +40,6 @@ IsAuthorized(idx) :-
 // C4: Deny if insurance is no and not gold
 // @deny_message: Only gold members or members with travel insurance can cancel reservations
 // @suggestion: Purchase travel insurance or upgrade to gold membership
-// @tool_pattern: cancel_reservation
 Unauthorized(idx) :-
     Actions(idx, a),
     IsTool(a, "cancel_reservation"),
@@ -50,7 +49,6 @@ Unauthorized(idx) :-
 // C5: Guard - deny if insurance is unknown and membership is not gold
 // @deny_message: Cannot determine cancellation eligibility without reservation details
 // @suggestion: Retrieve reservation details including insurance status
-// @tool_pattern: cancel_reservation
 Unauthorized(idx) :-
     Actions(idx, a),
     IsTool(a, "cancel_reservation"),
@@ -75,7 +73,6 @@ IsAuthorized(idx) :-
 // C8: Deny if cabin is basic_economy and membership is regular
 // @deny_message: Regular members cannot modify basic economy flight reservations
 // @suggestion: Upgrade to silver or gold membership for modification capability
-// @tool_pattern: update_reservation_flights
 Unauthorized(idx) :-
     Actions(idx, a),
     IsTool(a, "update_reservation_flights"),
@@ -85,7 +82,6 @@ Unauthorized(idx) :-
 // C9: Guard - deny if cabin is unknown
 // @deny_message: Cannot determine modification eligibility without reservation details
 // @suggestion: Retrieve reservation details including cabin class
-// @tool_pattern: update_reservation_flights
 Unauthorized(idx) :-
     Actions(idx, a),
     IsTool(a, "update_reservation_flights"),
@@ -94,7 +90,6 @@ Unauthorized(idx) :-
 // C10: Guard - deny if cabin is basic_economy and membership is unknown
 // @deny_message: Cannot determine modification eligibility without membership information
 // @suggestion: Verify membership level before modifying basic economy reservations
-// @tool_pattern: update_reservation_flights
 Unauthorized(idx) :-
     Actions(idx, a),
     IsTool(a, "update_reservation_flights"),
