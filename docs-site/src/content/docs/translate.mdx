@@ -55,7 +55,8 @@ with open("policy_english.md") as f:
 result = translate(
     policy,
     codebase_paths=["tau2-bench/src/tau2"],
-    instructions="<custom instructions>",  # overrides the analyzer can't infer from code — e.g. "filter messages on msg.agent='LLMAgent'"
+    # requirements the translator can't infer from code or the input policy
+    instructions="<custom instructions>",  
 )
 
 result.print_summary()
