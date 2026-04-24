@@ -163,7 +163,6 @@ has no insurance and the member is not gold"
 //   travel insurance can cancel reservations
 // @suggestion: Purchase travel insurance or upgrade
 //   to gold membership
-// @tool_pattern: cancel_reservation
 Unauthorized(idx) :-
     Actions(idx, a),
     IsTool(a, "cancel_reservation"),
@@ -195,7 +194,6 @@ guard skips them.
 //   eligibility without reservation details
 // @suggestion: Retrieve reservation details
 //   including insurance status
-// @tool_pattern: cancel_reservation
 Unauthorized(idx) :-
     Actions(idx, a),
     IsTool(a, "cancel_reservation"),
@@ -271,7 +269,6 @@ economy reservations for regular members"
 //   basic economy flight reservations
 // @suggestion: Upgrade to silver or gold membership
 //   for modification capability
-// @tool_pattern: update_reservation_flights
 Unauthorized(idx) :-
     Actions(idx, a),
     IsTool(a, "update_reservation_flights"),
@@ -292,7 +289,6 @@ Unauthorized(idx) :-
 //   eligibility without reservation details
 // @suggestion: Retrieve reservation details
 //   including cabin class
-// @tool_pattern: update_reservation_flights
 Unauthorized(idx) :-
     Actions(idx, a),
     IsTool(a, "update_reservation_flights"),
@@ -321,7 +317,6 @@ sneak through with a partial lookup.
 //   eligibility without membership information
 // @suggestion: Verify membership level before
 //   modifying basic economy reservations
-// @tool_pattern: update_reservation_flights
 Unauthorized(idx) :-
     Actions(idx, a),
     IsTool(a, "update_reservation_flights"),
