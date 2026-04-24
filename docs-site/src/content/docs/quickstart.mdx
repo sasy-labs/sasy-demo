@@ -297,13 +297,16 @@ sasy.instrument()
 - Tau2-bench agents — user-simulator and assistant
   messages, tool calls, and results are recorded
   (with dependencies); tool calls are auto-checked.
+  **Opt-in** — pass `sasy.instrument(tau2=True)` to
+  enable. HTTP and Langroid are on by default.
 
 After `instrument()`, existing tool calls on any
 of the patched frameworks flow through SASY without
 code changes. The example below uses Langroid; the
-same `sasy.instrument()` call covers plain `httpx` /
-`requests` and Tau2-bench agents too — no framework
-switch needed.
+same bare `sasy.instrument()` call covers plain
+`httpx` / `requests` too — no framework switch
+needed. For Tau2-bench agents, pass `tau2=True` as
+noted above.
 
 ```python
 import sasy
