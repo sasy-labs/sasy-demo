@@ -313,11 +313,13 @@ sasy.instrument()
 
 agent = lr.ChatAgent(lr.ChatAgentConfig(...))
 agent.enable_message(MyTool)
-# Tool calls inside agent.llm_response() are now
+# lr.Task drives the agent loop — calling the LLM,
+# executing tool calls, and looping. After
+# instrument(), every tool call inside the loop is
 # checked against the loaded policy automatically;
 # denied calls raise (or return a typed error,
 # depending on the integration).
-response = agent.llm_response("cancel my booking")
+result = lr.Task(agent).run("cancel my booking")
 ```
 
 For a runnable end-to-end example see
