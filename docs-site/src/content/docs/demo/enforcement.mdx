@@ -23,14 +23,14 @@ the SASY policy engine before execution.
 
 3. **SASY checks the policy**
 
-   Before the tool executes, SASY evaluates the
-   call against the loaded Datalog. `IsAuthorized`
-   rules allow, `Unauthorized` rules deny, and
-   denials win on conflict. That's the entire
-   engine contract — what *specific* rules fire
-   depends on the policy you loaded; the demo's
-   rules look at membership, insurance, and cabin
-   class.
+   SASY evaluates the call against the loaded
+   Datalog. For `get_reservation_details(RKLA42)`,
+   the demo's default-allow rule
+   (`IsAuthorized(idx) :- Actions(idx, _).`) fires,
+   and no `Unauthorized` rule targets this tool —
+   so the call is authorized. If any `Unauthorized`
+   rule had matched, it would have overridden the
+   default; denials win on conflict.
 
 4. **Decision: AUTHORIZED or DENIED**
 
