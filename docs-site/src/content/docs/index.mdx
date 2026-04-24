@@ -15,7 +15,7 @@ hero:
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
 
-<CardGrid>
+<CardGrid stagger>
   <Card title="Translate" icon="pencil">
     Write your policy in plain English. The SASY SDK translates
     it into verified Datalog in minutes.
@@ -29,9 +29,5 @@ import { Card, CardGrid } from '@astrojs/starlight/components';
   <Card title="Enforce" icon="seti:lock">
     Upload the policy. Every tool call your agent makes is
     checked in real time.
-  </Card>
-  <Card title="Observe" icon="open-book">
-    See exactly which calls were allowed or denied, with
-    human-readable reasons.
   </Card>
 </CardGrid>
