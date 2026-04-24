@@ -127,6 +127,51 @@ intent was compared against the specification.
 every rule in the Datalog maps to a clause in
 the specification, and vice versa.
 
+## Prerequisite Guards
+
+Some authorization decisions depend on data that
+only exists after a prior tool call. The demo's
+cancellation rules reference `insurance` and
+`membership` — fields that only appear after
+`get_reservation_details` runs.
+
+`write_policy` handles this automatically: when the
+English spec references fields from prior tool
+results, the translator emits a **guard rule** that
+denies the call while those fields aren't yet
+visible. For the demo's cancellation spec, that
+becomes C5 in the generated policy:
+
+```prolog
+Unauthorized(idx) :-
+    Actions(idx, a),
+    IsTool(a, "cancel_reservation"),
+    !ToolResultField("get_reservation_details",
+        "insurance", _),
+    !ToolResultField("get_reservation_details",
+        "membership", "gold").
+```
+
+`!ToolResultField(...)` is Datalog negation — the
+rule fires exactly when the fields haven't been
+populated. From the agent's perspective, the
+behavior is a natural retry loop:
+
+```
+Agent: cancel_reservation(RKLA42)
+SASY:  ✗ DENIED — look up reservation details first
+Agent: get_reservation_details(RKLA42)
+SASY:  ✓ AUTHORIZED
+Agent: cancel_reservation(RKLA42)
+SASY:  ✓ AUTHORIZED (insurance=yes)
+```
+
+In the truth table these scenarios surface as the
+`GUARD_DENY` rows shown above; the
+[Guard Auditor](#independent-checks-33-passed)
+independent check verifies the ordering is
+actually enforced.
+
 ## Programmatic Access
 
 All verification data is available on the result

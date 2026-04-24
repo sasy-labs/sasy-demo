@@ -75,49 +75,6 @@ The agent receives a structured denial:
 
 The agent can use these to craft a helpful response.
 
-## Prerequisite Guards (a policy pattern)
-
-Some authorization decisions depend on data that
-only exists after a prior tool call. The demo's
-cancellation rules reference `insurance` and
-`membership` — fields that only appear after
-`get_reservation_details` has run. The policy
-handles this with a **guard rule** that denies
-`cancel_reservation` when the required fields
-aren't yet visible (C5 in `policy.dl`):
-
-```prolog
-Unauthorized(idx) :-
-    Actions(idx, a),
-    IsTool(a, "cancel_reservation"),
-    !ToolResultField("get_reservation_details",
-        "insurance", _),
-    !ToolResultField("get_reservation_details",
-        "membership", "gold").
-```
-
-`!ToolResultField(...)` is Datalog negation — the
-rule fires exactly when the fields haven't been
-populated. From the agent's perspective, the
-behavior is a natural retry loop:
-
-```
-Agent: cancel_reservation(RKLA42)
-SASY:  ✗ DENIED — look up reservation details first
-Agent: get_reservation_details(RKLA42)
-SASY:  ✓ AUTHORIZED
-Agent: cancel_reservation(RKLA42)
-SASY:  ✓ AUTHORIZED (insurance=yes)
-```
-
-<Aside type="tip">
-  The experimental
-  [`sasy.policy.write_policy`](/translate/#experimental-extended-policy-validation)
-  translator tends to emit guard-shaped rules
-  automatically when the English spec references
-  fields from prior tool results.
-</Aside>
-
 ## Observability
 
 Every tool call, policy decision, and tool result
