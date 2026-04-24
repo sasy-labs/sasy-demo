@@ -288,13 +288,15 @@ sasy.instrument()
 
 `sasy.instrument()` currently patches:
 
-- `httpx` and `requests` (outbound HTTP — recorded
-  + proxied through SASY for credential injection
-  + policy checks)
-- Langroid (`ChatAgent` tool calls — auto-checked
-  before invocation)
-- Tau2-bench agents (the user-simulator + assistant
-  loops the airline benchmark uses)
+- `httpx` and `requests` — outbound HTTP requests are
+  recorded into the graph and proxied through SASY
+  for credential injection and policy checks.
+- Langroid — `ChatAgent` and `Task` messages, tool
+  calls, and their dependency edges are recorded;
+  tool calls are auto-checked before invocation.
+- Tau2-bench agents — user-simulator and assistant
+  messages, tool calls, and results are recorded
+  (with dependencies); tool calls are auto-checked.
 
 After `instrument()`, existing tool calls on any
 of the patched frameworks flow through SASY without
