@@ -24,13 +24,13 @@ the SASY policy engine before execution.
 3. **SASY checks the policy**
 
    Before the tool executes, SASY evaluates the
-   call against the loaded Datalog policy. It
-   checks:
-
-   - Is this tool on the allowlist?
-   - Are there any `Unauthorized` rules that match?
-   - Has the required prerequisite data been
-     looked up?
+   call against the loaded Datalog. `IsAuthorized`
+   rules allow, `Unauthorized` rules deny, and
+   denials win on conflict. That's the entire
+   engine contract — what *specific* rules fire
+   depends on the policy you loaded; the demo's
+   rules look at membership, insurance, and cabin
+   class.
 
 4. **Decision: AUTHORIZED or DENIED**
 
@@ -75,15 +75,31 @@ The agent receives a structured denial:
 
 The agent can use these to craft a helpful response.
 
-## Prerequisite Guards
+## Prerequisite Guards (a policy pattern)
 
-Some policy rules depend on data that must be
-looked up first. For example, the cancellation
-policy checks `insurance` and `membership` — but
-these fields only exist after
-`get_reservation_details` is called.
+Some authorization decisions depend on data that
+only exists after a prior tool call. The demo's
+cancellation rules reference `insurance` and
+`membership` — fields that only appear after
+`get_reservation_details` has run. The policy
+handles this with a **guard rule** that denies
+`cancel_reservation` when the required fields
+aren't yet visible (C5 in `policy.dl`):
 
-**Guard rules** enforce this ordering:
+```prolog
+Unauthorized(idx) :-
+    Actions(idx, a),
+    IsTool(a, "cancel_reservation"),
+    !ToolResultField("get_reservation_details",
+        "insurance", _),
+    !ToolResultField("get_reservation_details",
+        "membership", "gold").
+```
+
+`!ToolResultField(...)` is Datalog negation — the
+rule fires exactly when the fields haven't been
+populated. From the agent's perspective, the
+behavior is a natural retry loop:
 
 ```
 Agent: cancel_reservation(RKLA42)
@@ -94,15 +110,16 @@ Agent: cancel_reservation(RKLA42)
 SASY:  ✓ AUTHORIZED (insurance=yes)
 ```
 
-The agent naturally retries after the lookup,
-and the second attempt succeeds because the
-required data is now available.
+The engine doesn't know the word "guard" — it just
+evaluates the rule. Guards are a pattern the
+policy author writes.
 
 <Aside type="tip">
-  Guards prevent the agent from making decisions
-  without sufficient context. They're generated
-  automatically when the policy depends on tool
-  result fields.
+  The experimental
+  [`sasy.policy.write_policy`](/translate/#experimental-extended-policy-validation)
+  translator tends to emit guard-shaped rules
+  automatically when the English spec references
+  fields from prior tool results.
 </Aside>
 
 ## Observability
