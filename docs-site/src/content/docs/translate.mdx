@@ -82,10 +82,9 @@ This writes `output/airline_policy.dl` and `output/agent_summary.md`, plus `outp
 
 ### What the service does
 
-1. **Isolates the job** — your codebase is unpacked into a fresh bubblewrap sandbox per request, with an egress allowlist and read-only toolkit mount.
-2. **Stage 1** — an agent reads your codebase and produces `agent_summary.md` describing instrumentation points, tool calls, and message flow.
-3. **Stage 2** — a second agent, armed with the summary and the `policy-compiler` skill, writes the Datalog policy + functors.
-4. **Server-side validation** — the artifacts are compiled against the toolkit's `common_policy.dl` before being returned.
+1. **Stage 1** — an agent reads your codebase and produces `agent_summary.md` describing instrumentation points, tool calls, and message flow.
+2. **Stage 2** — a second agent, armed with the summary and the `policy-compiler` skill, writes the Datalog policy + functors.
+3. **Server-side validation** — the artifacts are compiled against the toolkit's `common_policy.dl` before being returned.
 
 ## What You Get Back
 
