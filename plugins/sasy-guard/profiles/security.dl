@@ -55,10 +55,12 @@ ExplicitMode() :- RuleOn(_).
 RuleEnabled(g) :- KnownRule(g), !ExplicitMode(), !RuleOff(g).  // default-all minus rule_off
 RuleEnabled(g) :- RuleOn(g).                                   // explicit opt-in
 
-// Transitive reachability over the dependency graph (scan-after-edit).
+// Transitive reachability over the dependency graph (scan-after-edit). Consumed ONLY
+// as Reaches(<edit|scan>, <scan|review-SINK>), so it is ROOTED at the sink set — see
+// the definition at the end of the file (ReachSink). The old all-pairs closure from
+// every node materialized O(n²) ancestor-descendant pairs and made policy eval grow
+// quadratically with session length (≈6 s at ~5k nodes); sink-rooting makes it O(n).
 .decl Reaches(src: symbol, dst: symbol)
-Reaches(src, dst) :- Edge(src, dst).
-Reaches(src, dst) :- Reaches(src, mid), Edge(mid, dst).
 
 .decl InContext(id: symbol)
 InContext(id) :- Current(id).
@@ -106,21 +108,86 @@ Unauthorized(idx) :- RuleEnabled("data_loss"), ForcePush(idx).
 
 /* ── 2. Secret-scan gate on push ───────────────────────────────────── */
 
-// Edits in the current slice (Claude Code edit tools).
-.decl RecentEdit(id: symbol)
-RecentEdit(id) :- CurrentDepends(id), ToolResult(id, "Edit", _).
-RecentEdit(id) :- CurrentDepends(id), ToolResult(id, "Write", _).
-RecentEdit(id) :- CurrentDepends(id), ToolResult(id, "MultiEdit", _).
+// Repo root the current push targets (git toplevel), supplied per-check by the
+// daemon as ActionMetadata. One action per check, so match any index.
+.decl RepoRoot(root: symbol)
+RepoRoot(root) :- ActionMetadata(_, "repo_root", root, _).
+.decl HaveRepoRoot()
+HaveRepoRoot() :- RepoRoot(_).
 
-// A gitleaks run = a Bash tool result that actually INVOKED gitleaks as a
-// command. cmd_invokes (not a substring) so `echo 'gitleaks: no leaks found'`
-// can't spoof a clean scan and clear the push gate.
+// Args of every edit-family tool result — grounds `args` for the path check below.
+// Gated on IsPush (the only consumer, RecentEdit, feeds only push rules), matching
+// the relevance-gate pattern of Reaches / CurrentDepends so a benign non-push
+// check doesn't materialize one tuple per session edit.
+.decl EditArgs(args: symbol)
+EditArgs(args) :- IsPush(_), ToolResult(_, "Edit", args).
+EditArgs(args) :- IsPush(_), ToolResult(_, "Write", args).
+EditArgs(args) :- IsPush(_), ToolResult(_, "MultiEdit", args).
+
+// An edit gates a push only if its target file is INSIDE the repo being pushed:
+// a push can't ship an out-of-tree file (a /tmp scratchpad script, a file under
+// another repo), so those must not trip the secret-scan / review gates. `repo_root`
+// carries a trailing slash (path boundary, set daemon-side) and is emitted ONLY
+// for a push that targets THIS cwd's repo. file_path is absolute for the CC edit
+// tools, so a prefix match suffices.
+//
+// FAIL-SAFE on every ambiguity — never silently drop a push-gating edit:
+//   · no repo_root at all (non-git cwd, withheld/cross-repo push) → count.
+//   · repo_root present but file_path missing/empty (malformed args) → count.
+// Accepted residual: a repo UNDER a symlinked path (macOS /tmp→/private/tmp) can
+// realpath-mismatch `file_path` and be wrongly excluded (fail-open). Real repos
+// aren't under symlinks and /private-temp scratchpad is unambiguously outside, so
+// this is not reachable for the intended use; revisit if repos move under /tmp.
+.decl EditPathRelevant(args: symbol)
+EditPathRelevant(args) :- EditArgs(args), RepoRoot(root),
+    @str_starts_with(@json_get_str(args, "file_path"), root) = 1.
+EditPathRelevant(args) :- EditArgs(args), !HaveRepoRoot().
+EditPathRelevant(args) :- EditArgs(args), HaveRepoRoot(),
+    @json_get_str(args, "file_path") = "".
+
+// Edits in the current slice (Claude Code edit tools), scoped to repo files.
+.decl RecentEdit(id: symbol)
+RecentEdit(id) :- CurrentDepends(id), ToolResult(id, "Edit", args), EditPathRelevant(args).
+RecentEdit(id) :- CurrentDepends(id), ToolResult(id, "Write", args), EditPathRelevant(args).
+RecentEdit(id) :- CurrentDepends(id), ToolResult(id, "MultiEdit", args), EditPathRelevant(args).
+
+// A gitleaks SCAN run = a Bash tool result that runs gitleaks with a scanning
+// subcommand (git / dir / protect / detect), via @cmd_runs_sub — which tokenizes
+// the command QUOTE-AWARELY, so flags before the subcommand
+// (`gitleaks --flags git`) and wrapped forms (`sh -c 'gitleaks git'`) match,
+// while a `gitleaks` name inside a quoted ARGUMENT does not: an agent cannot
+// forge a scan with `echo 'x; gitleaks git; no leaks found'` (which would
+// otherwise mint GitleaksRun AND GitleaksClean in one call and clear every rule
+// below). Requiring a scanning subcommand also excludes `gitleaks version` /
+// `command -v gitleaks` install-checks: they invoke gitleaks but never print
+// "no leaks found", so they counted as run-but-never-clean and flipped an
+// uncovered edit's symptom into a FALSE FlaggedEdit ("potential secret").
+// `protect` is included because it is a legitimate pre-push scan — omitting it
+// dead-ends the user, who runs a real clean scan and is still told to scan.
+//
+// A GitleaksRun also requires EVIDENCE the scan actually COMPLETED — its output
+// carries gitleaks' verdict/summary line ("... leaks found" or "N commits
+// scanned"). Command shape alone is not enough: a scan that fails to execute
+// (`gitleaks git --badflag` usage error, a missing binary) matches the shape and
+// prints no "no leaks found", so it would satisfy ScannedSinceEdit but not
+// GitleaksClean → a FlaggedEdit the user could APPROVE as a false positive even
+// though nothing was scanned. Requiring the summary line makes a failed scan
+// count as NO scan (→ UnscannedEdit, a hard "run the scan"), not an approvable
+// finding. A real dirty scan still prints "leaks found:" → GitleaksRun ∧ !Clean.
 .decl GitleaksRun(id: symbol)
 GitleaksRun(id) :-
     InContext(id),
     ToolResult(id, "Bash", args),
     cmd = @json_get_str(args, "command"),
-    @cmd_invokes(cmd, "gitleaks") = 1.
+    ( @cmd_runs_sub(cmd, "gitleaks", "git") = 1
+    ; @cmd_runs_sub(cmd, "gitleaks", "dir") = 1
+    ; @cmd_runs_sub(cmd, "gitleaks", "protect") = 1
+    ; @cmd_runs_sub(cmd, "gitleaks", "detect") = 1 ),
+    SentMessage(id, msg),
+    ( @str_contains(msg.contents, "leaks found") = 1
+    ; @str_contains(msg.contents, "Leaks found") = 1
+    ; @str_contains(msg.contents, "commits scanned") = 1
+    ; @str_contains(msg.contents, "scanned ~") = 1 ).
 
 // Clean = gitleaks reported no leaks (success output).
 .decl GitleaksClean(id: symbol)
@@ -128,28 +195,89 @@ GitleaksClean(id) :- GitleaksRun(id), SentMessage(id, msg), @str_contains(msg.co
 GitleaksClean(id) :- GitleaksRun(id), SentMessage(id, msg), @str_contains(msg.contents, "No leaks found") = 1.
 
 .decl IsPush(idx: unsigned)
-IsPush(idx) :-
-    Actions(idx, a),
-    a = $CallTool("Bash", args),
-    cmd = @json_get_str(args, "command"),
-    @str_contains(cmd, "git") = 1,
-    @str_contains(cmd, "push") = 1,
-    @str_contains(cmd, "stash") = 0.
+// A `git push` INVOCATION, via @cmd_runs_sub (tokenizes the command + reads git's
+// subcommand). Matches `git push`, `git push --force`, `git -C x push`,
+// `git commit && git push`, and — critically — forms that hide git behind a
+// WRAPPER: `sh -c 'git push'`, `eval "git push"`, `timeout 60 git push`,
+// `env`/`xargs`/`sudo`/`nohup` git push, `"git" push`, and `\`+newline splits.
+// A first-word-only scan misses all of those, which would leave a prompt-injected
+// agent free to push unscanned, tainted content with NO gate (IsRepoSink is
+// defined from IsPush below, so a miss here disables the taint gate too).
+// A `git commit` whose MESSAGE merely mentions push (even "; git push") is NOT a
+// push: the tokenizer is quote-aware, so quoted text is data. This replaces both
+// the "git"+"push" substring (false-positive on commit messages) and the
+// contiguous "git push" stopgap (false-negative on `git -C x push`).
+IsPush(idx) :- ShellCommand(idx, cmd), @cmd_runs_sub(cmd, "git", "push") = 1.
 
-// An edit is covered if a clean scan ran after it (scan reachable from edit).
+// An edit is covered iff a CLEAN scan ran after it (scan reachable from edit).
 .decl CoveredByGitleaks(edit_id: symbol)
 CoveredByGitleaks(e) :- RecentEdit(e), GitleaksClean(s), Reaches(e, s).
 
-.decl UncoveredEdit(edit_id: symbol)
-UncoveredEdit(e) :- RecentEdit(e), !CoveredByGitleaks(e).
+// SOME gitleaks scan (clean or not) ran after this edit.
+.decl ScannedSinceEdit(edit_id: symbol)
+ScannedSinceEdit(e) :- RecentEdit(e), GitleaksRun(s), Reaches(e, s).
 
-// @deny_message: Push blocked — run a gitleaks scan first (no secret scan is visible in this session)
-// @suggestion: Run `gitleaks detect` (or `gitleaks dir`) and ensure it reports no leaks before pushing
-Unauthorized(idx) :- RuleEnabled("secret_scan"), IsPush(idx), !GitleaksClean(_).
+// A clean scan that ran AFTER `s` (reachable from it), i.e. `s`'s finding has
+// since been re-scanned clean.
+.decl CleanScanAfter(scan: symbol)
+CleanScanAfter(s) :- GitleaksRun(s), GitleaksClean(c), Reaches(s, c).
 
-// @deny_message: Push blocked — edited files have not been covered by a clean gitleaks scan
-// @suggestion: Re-run `gitleaks detect` after your latest edits, then push
-Unauthorized(idx) :- RuleEnabled("secret_scan"), IsPush(idx), UncoveredEdit(_).
+// A flagged scan is still outstanding unless a CLEAN scan ran AFTER it. ORDER
+// matters in BOTH directions, so this cannot be `!GitleaksClean(_)`:
+//   · dirty → clean: the later clean re-scan (leak fixed / allowlisted) clears it.
+//   · clean → dirty: an EARLIER clean scan must NOT mask a newer finding. This is
+//     the dangerous direction and the unordered form got it wrong — with no
+//     tracked edits, `scan clean` → `git pull` brings in a secret → `re-scan
+//     dirty` left this false, so C' never fired and the push shipped the secret.
+// Especially load-bearing here because C' is the no-tracked-edit branch: the leak
+// arrived by pull/checkout/external means, exactly when an earlier clean scan is
+// stale evidence about DIFFERENT content. Mirrors CoveredByGitleaks/FlaggedEdit,
+// which are per-edit ordered for the same reason ("an earlier spurious pass never
+// masks a real hit"). Scans that are siblings (neither reaches the other) leave
+// this true — fail-closed.
+.decl GitleaksDirty()
+GitleaksDirty() :- GitleaksRun(s), !GitleaksClean(s), !CleanScanAfter(s).
+
+.decl HasRecentEdit()
+HasRecentEdit() :- RecentEdit(_).
+
+// Edit never scanned since it was made → a clear mechanical action (run the
+// scan), so it stays a hard deny that NAMES the tool call to make.
+.decl UnscannedEdit(edit_id: symbol)
+UnscannedEdit(e) :- RecentEdit(e), !ScannedSinceEdit(e).
+
+// Edit scanned after editing, but the covering scan FLAGGED a leak (no clean
+// scan reaches it). A gitleaks hit can be a false positive, and only the user
+// can tell a real secret from a spurious match — so this @asks rather than
+// hard-blocks. Per-edit via `Reaches`: a later scan that finds a REAL leak on a
+// NEW edit re-flags it, so an earlier spurious pass never masks a real hit.
+.decl FlaggedEdit(edit_id: symbol)
+FlaggedEdit(e) :- RecentEdit(e), ScannedSinceEdit(e), !CoveredByGitleaks(e).
+
+// A) A push with no tracked edits and no scan at all → run one first. Keeps
+//    "every push is scanned" even when this session made no tracked edits.
+// @deny_message: Push blocked — no gitleaks secret scan has run in this session
+// @suggestion: Call gitleaks via the Bash tool (e.g. run `gitleaks git --log-opts=origin/main..HEAD`) and confirm it reports "no leaks found" before pushing
+Unauthorized(idx) :- RuleEnabled("secret_scan"), IsPush(idx), !GitleaksRun(_), !HasRecentEdit().
+
+// B) Files edited without a fresh scan covering them → (re-)scan. Clear action.
+// @deny_message: Push blocked — files edited this session without a fresh gitleaks scan
+// @suggestion: Call gitleaks via the Bash tool (e.g. `gitleaks git --log-opts=origin/main..HEAD`) AFTER your latest edits and confirm "no leaks found", then push
+Unauthorized(idx) :- RuleEnabled("secret_scan"), IsPush(idx), UnscannedEdit(_).
+
+// C) A scan flagged a potential secret in edited files → @ask (may be a false
+//    positive; only the user can adjudicate). NOT a hard block.
+// @ask
+// @deny_message: gitleaks flagged a potential secret in files edited this session
+// @suggestion: If it's a real secret, remove it and re-scan via Bash; if it's a false positive, approve to push (or add a gitleaks allowlist / .gitleaksignore entry and re-scan clean)
+Unauthorized(idx) :- RuleEnabled("secret_scan"), IsPush(idx), FlaggedEdit(_).
+
+// C') A scan flagged something but this session made no tracked edits to tie it
+//     to → still @ask (a leak in un-edited content would ship on push).
+// @ask
+// @deny_message: gitleaks flagged a potential secret (not tied to a tracked edit this session)
+// @suggestion: If it's a real secret, remove it and re-scan via Bash; if it's a false positive, approve to push (or add a gitleaks allowlist / .gitleaksignore entry and re-scan clean)
+Unauthorized(idx) :- RuleEnabled("secret_scan"), IsPush(idx), GitleaksDirty(), !HasRecentEdit().
 
 /* ── 3. Prompt-injection exfiltration ──────────────────────────────── */
 
@@ -158,32 +286,41 @@ UntrustedInContext() :- InContext(id), ToolResult(id, "WebFetch", _).
 UntrustedInContext() :- InContext(id), ToolResult(id, "WebSearch", _).
 UntrustedInContext() :- InContext(id), ToolResult(id, "RemoteAgent", _).
 
-// Matched on the NORMALIZED command (ShellNorm: lowercased, whitespace
-// collapsed, line-continuations folded) — otherwise `CURL`, `Curl`, or a
-// `cur\<newline>l` line-continuation defeats the egress gate (the highest-value
-// defense), even though the same normalized form already exists for the
-// reverse-shell / curl|sh rules.
-.decl IsExfil(idx: unsigned)
-IsExfil(idx) :- ShellNorm(idx, n), @str_contains(n, "curl") = 1.
-IsExfil(idx) :- ShellNorm(idx, n), @str_contains(n, "wget") = 1.
-IsExfil(idx) :- ShellNorm(idx, n), @str_contains(n, "nc ") = 1.
-IsExfil(idx) :- ShellNorm(idx, n), @str_contains(n, "ncat") = 1.
-IsExfil(idx) :- ShellNorm(idx, n), @str_contains(n, "netcat") = 1.
-IsExfil(idx) :- ShellNorm(idx, n), @str_contains(n, "scp ") = 1.
-IsExfil(idx) :- ShellNorm(idx, n), @str_contains(n, "ssh ") = 1.
-IsExfil(idx) :- ShellNorm(idx, n), @str_contains(n, "rsync ") = 1.
-IsExfil(idx) :- ShellNorm(idx, n), @str_contains(n, "telnet ") = 1.
-// DNS exfil — encode the secret as a subdomain of an attacker NS.
-IsExfil(idx) :- ShellNorm(idx, n), @str_contains(n, "dig ") = 1.
-IsExfil(idx) :- ShellNorm(idx, n), @str_contains(n, "nslookup ") = 1.
-// Interpreter HTTP clients (the WebFetch-free exfil path).
-IsExfil(idx) :- ShellNorm(idx, n), @str_contains(n, "urlopen(") = 1.
-IsExfil(idx) :- ShellNorm(idx, n), @str_contains(n, "requests.") = 1.
-IsExfil(idx) :- ShellNorm(idx, n), @str_contains(n, "http.client") = 1.
+// Egress-program needles classified by the TOKEN scanner (@cmd_egress_class), not a
+// raw substring: it distinguishes a program that actually RUNS (`curl …`, `sudo
+// curl`, `sh -c 'curl'`, `ssh host cmd`) from the name appearing as inert DATA
+// (`echo "curl …"`, a commit message, `grep "curl" f`) or as a whole-word non-match
+// (`sync`/`async` are NOT `nc`). This kills the substring false positives while
+// keeping the deny conservative — see @cmd_egress_class for the 0/1/2 contract
+// (2 = runs → deny, 1 = present-but-unprovable → @ask, 0 = inert/absent → allow).
+.decl ExfilProg(p: symbol)
+ExfilProg("curl").   ExfilProg("wget").   ExfilProg("nc").    ExfilProg("ncat").
+ExfilProg("netcat"). ExfilProg("scp").    ExfilProg("ssh").   ExfilProg("rsync").
+ExfilProg("telnet"). ExfilProg("dig").    ExfilProg("nslookup").
+
+// EXECUTED (class 2): a needle program runs at a command position → hard egress.
+.decl ExfilExec(idx: unsigned)
+ExfilExec(idx) :- ShellCommand(idx, cmd), ExfilProg(p), @cmd_egress_class(cmd, p) = 2.
+// Interpreter HTTP clients — Python egress inside `python -c "…"`. The URL/verb
+// lives in CODE, not a shell command position, so these stay high-signal substrings
+// (they don't tokenize as shell commands). Matched on the normalized command.
+ExfilExec(idx) :- ShellNorm(idx, n), @str_contains(n, "urlopen(") = 1.
+ExfilExec(idx) :- ShellNorm(idx, n), @str_contains(n, "requests.") = 1.
+ExfilExec(idx) :- ShellNorm(idx, n), @str_contains(n, "http.client") = 1.
+
+// AMBIGUOUS (class 1): the needle NAME is present but execution can't be proven —
+// variable indirection (`x=curl; $x`) or a bare-name arg to a possible unknown
+// wrapper. Not provably egress, not provably inert → @ask (never a silent allow).
+.decl ExfilMaybe(idx: unsigned)
+ExfilMaybe(idx) :- ShellCommand(idx, cmd), ExfilProg(p), @cmd_egress_class(cmd, p) = 1.
 
 // @deny_message: Outbound network command blocked — context depends on untrusted web-fetched content (possible prompt-injection exfiltration)
 // @suggestion: Do not send data to the network while acting on fetched web content; if intentional, ask the user to run it
-Unauthorized(idx) :- RuleEnabled("exfil"), IsExfil(idx), UntrustedInContext().
+Unauthorized(idx) :- RuleEnabled("exfil"), ExfilExec(idx), UntrustedInContext().
+// @ask
+// @deny_message: Possible outbound command while untrusted web-fetched content is in context — a network tool's name appears but the command couldn't be confirmed to run it (e.g. via a variable)
+// @suggestion: If this does NOT send data to the network, approve; otherwise avoid network egress while acting on fetched content, or run it yourself
+Unauthorized(idx) :- RuleEnabled("exfil"), ExfilMaybe(idx), UntrustedInContext().
 
 /* ── 3b. Secret-bearing reads → egress (toxic-flow, hard deny) ─────── */
 // Complements the untrusted-source rule above: block an outbound command when
@@ -192,8 +329,8 @@ Unauthorized(idx) :- RuleEnabled("exfil"), IsExfil(idx), UntrustedInContext().
 
 // Secret-bearing paths and the read-ish verbs that pull them into context.
 // Used for both the Read tool (file_path) and Bash (normalized command). The
-// deny still requires an egress sink (IsExfil/WebEgress), so a broad match here
-// stays conservative — it never blocks the read itself.
+// deny still requires an egress sink (ExfilExec/ExfilMaybe/WebEgress), so a broad
+// match here stays conservative — it never blocks the read itself.
 .decl SensitivePath(p: symbol)
 SensitivePath(".env").  SensitivePath(".ssh/").  SensitivePath("id_rsa").
 SensitivePath(".aws/credentials").  SensitivePath(".npmrc").  SensitivePath(".netrc").
@@ -215,10 +352,14 @@ SensitiveInContext() :- InContext(id), ToolResult(id, "Bash", args),
 
 // @deny_message: Outbound command blocked — secret-bearing files (.env/.ssh) are in context (possible exfiltration)
 // @suggestion: Don't send secrets to the network; if intentional, run the command yourself
-Unauthorized(idx) :- RuleEnabled("toxic_flow"), IsExfil(idx), SensitiveInContext().
+Unauthorized(idx) :- RuleEnabled("toxic_flow"), ExfilExec(idx), SensitiveInContext().
+// @ask
+// @deny_message: Possible outbound command with secret-bearing files (.env/.ssh) in context — a network tool's name appears but the command couldn't be confirmed to run it (e.g. via a variable)
+// @suggestion: If this does NOT send secrets to the network, approve; otherwise don't, or run the command yourself
+Unauthorized(idx) :- RuleEnabled("toxic_flow"), ExfilMaybe(idx), SensitiveInContext().
 
 // WebFetch is the tool-native egress channel (its URL/prompt can carry data
-// out) — IsExfil only sees Bash. A WebFetch with a secret in context is the
+// out) — ExfilExec only sees Bash. A WebFetch with a secret in context is the
 // read-secret→exfiltrate pattern (CVE-2025-55284 class). Scoped to
 // SensitiveInContext (NOT UntrustedInContext) to avoid blocking ordinary
 // chained browsing, where a prior WebFetch result is untrusted-in-context.
@@ -416,9 +557,18 @@ HiddenSourceHasTool(s) :- HiddenUnicodeSource(s), ToolResult(s, _, _).
 HiddenSourceLabel(s, label) :- HiddenUnicodeSource(s), ToolResult(s, fn, _), label = cat(cat("a ", fn), " result").
 HiddenSourceLabel(s, "upstream content") :- HiddenUnicodeSource(s), !HiddenSourceHasTool(s).
 
+// Pure user-interaction tools only surface a prompt/choices to the user — no
+// exfil, no file/command side effect — so the hidden-unicode gates never apply
+// to them. Critically, the agent uses AskUserQuestion to present THIS gate's own
+// approval menu: gating it would deadlock (the agent can't ask the question that
+// resolves the gate). ExitPlanMode is likewise a display-only tool.
+.decl InteractionTool(idx: unsigned)
+InteractionTool(idx) :- Actions(idx, a), a = $CallTool("AskUserQuestion", _).
+InteractionTool(idx) :- Actions(idx, a), a = $CallTool("ExitPlanMode", _).
+
 DenialReason(idx, "ask", reason,
              "Approve ONLY if this hidden text is benign (remembered as a detaint for this source). If it looks malicious, do NOT approve — revert the session to before the message that introduced it, since the agent has already read it.") :-
-    Actions(idx, _), InContext(s), HiddenUnicodeSource(s),
+    Actions(idx, _), !InteractionTool(idx), InContext(s), HiddenUnicodeSource(s),
     !DetaintApproved(s), !DetaintDenied(s),
     HiddenSourceLabel(s, label), SentMessage(s, m), decoded = @decode_unicode_tags(m.contents),
     reason = cat("Invisible or display-deceptive Unicode in ",
@@ -440,7 +590,7 @@ DenialReason(idx, "ask", reason,
 // messages, snapshots), so the source isn't lost as the conversation advances.
 // @deny_message: Acting on content from a hidden-text source you previously rejected
 // @suggestion: This taint source was denied; revert the session to before the message that introduced it
-Unauthorized(idx) :- Actions(idx, _), CurrentDepends(s), HiddenUnicodeSource(s),
+Unauthorized(idx) :- Actions(idx, _), !InteractionTool(idx), CurrentDepends(s), HiddenUnicodeSource(s),
     DetaintDenied(s), !DetaintApproved(s).
 
 /* ── 9. Public push / issue while tainted (Tier-1, @ask) ───────────── */
@@ -458,7 +608,7 @@ TaintedContext() :- UntrustedInContext().
 TaintedContext() :- SensitiveInContext().
 
 .decl IsRepoSink(idx: unsigned)
-IsRepoSink(idx) :- ShellCommand(idx, cmd), @str_contains(cmd, "git") = 1, @str_contains(cmd, "push") = 1, @str_contains(cmd, "stash") = 0.
+IsRepoSink(idx) :- IsPush(idx).  // a git push IS a repo sink — same @cmd_runs_sub definition as the secret_scan/review push gate (no more disagreement / commit-message FP)
 IsRepoSink(idx) :- ShellCommand(idx, cmd), @str_contains(cmd, "gh ") = 1, @str_contains(cmd, "issue create") = 1.
 IsRepoSink(idx) :- ShellCommand(idx, cmd), @str_contains(cmd, "gh ") = 1, @str_contains(cmd, "pr create") = 1.
 // Comments/reviews are an exfil channel too — their body posts to the repo.
@@ -478,13 +628,33 @@ Unauthorized(idx) :- RuleEnabled("public_push"), IsRepoSink(idx), RepoIsPublic()
 // deterministic, but review *quality* is LLM-backed, so don't hard-gate on it.
 
 // A review artifact node — a code/security-review subagent or a review skill.
+// Excludes "preview" so a preview-deploy tool can't pose as a review (mirrors
+// isReviewArtifact in review-diff.ts — keep the two in sync).
 .decl ReviewArtifact(id: symbol)
-ReviewArtifact(id) :- InContext(id), ToolResult(id, "Task", args),
-    st = @json_get_str(args, "subagent_type"), @str_contains(st, "review") = 1.
-ReviewArtifact(id) :- InContext(id), ToolResult(id, "Task", args),
-    st = @json_get_str(args, "subagent_type"), @str_contains(st, "security") = 1.
+// The subagent-LAUNCH tools, each carrying `subagent_type`. Named `Agent` in this
+// host and `Task` / `TaskCreate` / `TaskRun` in others; the daemon's isReviewArtifact
+// (review-diff.ts) recognizes all four, so mirror the SAME set here or a review
+// launched via TaskCreate/TaskRun would fail to credit ReviewedEdit on the
+// transcript-fallback path and re-gate an already-reviewed push. Factored into one
+// relation so the tool set lives in a single place — the prior per-tool duplication
+// is what let this list drift out of sync. (Exact names, where the daemon
+// prefix-matches taskcreate*/taskrun*; over-gating an exotic variant is the safe
+// direction, and a new name is a one-line add. Keep the two in sync.)
+.decl SubagentLaunch(id: symbol, st: symbol)
+SubagentLaunch(id, st) :- InContext(id), ToolResult(id, "Task", args),
+    st = @json_get_str(args, "subagent_type").
+SubagentLaunch(id, st) :- InContext(id), ToolResult(id, "Agent", args),
+    st = @json_get_str(args, "subagent_type").
+SubagentLaunch(id, st) :- InContext(id), ToolResult(id, "TaskCreate", args),
+    st = @json_get_str(args, "subagent_type").
+SubagentLaunch(id, st) :- InContext(id), ToolResult(id, "TaskRun", args),
+    st = @json_get_str(args, "subagent_type").
+ReviewArtifact(id) :- SubagentLaunch(id, st),
+    @str_contains(st, "review") = 1, @str_contains(st, "preview") = 0.
+ReviewArtifact(id) :- SubagentLaunch(id, st), @str_contains(st, "security") = 1.
 ReviewArtifact(id) :- InContext(id), ToolResult(id, "Skill", args),
-    sk = @json_get_str(args, "command"), @str_contains(sk, "review") = 1.
+    sk = @json_get_str(args, "command"),
+    @str_contains(sk, "review") = 1, @str_contains(sk, "preview") = 0.
 
 // An edit is reviewed iff a review ran *after* it (reachable from the edit), so
 // edits made after the last review stay unreviewed — large audit-suggested
@@ -501,22 +671,46 @@ EditSize(e, n) :- RecentEdit(e), ToolResult(e, "Write", args),
     s = @json_get_str(args, "content"), n = @str_len(s).
 EditSize(e, n) :- RecentEdit(e), ToolResult(e, "MultiEdit", args), n = @str_len(args).
 
-// (Re-)review threshold in characters — configurable via policy metadata,
-// default 800. A small fix stays proportional; a substantial change re-gates.
+// ── Review-gate sizing: git-diff PRIMARY, transcript char-sum FALLBACK ──
+// PRIMARY (in a git repo — the normal case for a push): the daemon captures a
+// git ANCHOR the moment a review runs (its PostToolUse) and, on a push, reports
+// the UNREVIEWED delta as added+deleted lines since that anchor — the whole
+// tracked tree if no review was ever captured (see review-diff.ts). git measures
+// this accurately: churn that cancels, whole-file Write rewrites, and scratchpad
+// / out-of-repo edits all resolve the way you'd want, unlike summing transcript
+// edit char-counts (which overcount all three and gate on every temp-file write).
+.decl ReviewDiffAvailable(idx: unsigned)
+ReviewDiffAvailable(idx) :- ActionMetadata(idx, "review_diff_available", _, _).
+.decl UnreviewedDiffLines(idx: unsigned, n: number)
+UnreviewedDiffLines(idx, n) :- ActionMetadata(idx, "unreviewed_diff_lines", _, v), n = to_number(v).
+
+// Git-path threshold in changed lines (added+deleted) — configurable, default 150.
+.decl ReviewDiffLinesConfigured()
+ReviewDiffLinesConfigured() :- PolicyMetadata("review_diff_lines", _, _).
+.decl ReviewDiffThreshold(n: number)
+ReviewDiffThreshold(n) :- PolicyMetadata("review_diff_lines", v, _), n = to_number(v).
+ReviewDiffThreshold(150) :- !ReviewDiffLinesConfigured().
+
+// FALLBACK (transcript path, only when no git diff is available — a non-repo
+// context, which can't actually push): per-edit char threshold, default 800.
 .decl ReviewThresholdConfigured()
 ReviewThresholdConfigured() :- PolicyMetadata("review_edit_threshold", _, _).
 .decl ReviewEditThreshold(n: number)
 ReviewEditThreshold(n) :- PolicyMetadata("review_edit_threshold", v, _), n = to_number(v).
 ReviewEditThreshold(800) :- !ReviewThresholdConfigured().
 
-// A substantial edit not (re-)reviewed → require a review before push.
-.decl LargeUnreviewedEdit()
-LargeUnreviewedEdit() :- EditSize(e, n), ReviewEditThreshold(t), n > t, !ReviewedEdit(e).
+.decl LargeUnreviewedEdit(idx: unsigned)
+// Git path: the accurate unreviewed diff exceeds the line threshold.
+LargeUnreviewedEdit(idx) :- ReviewDiffAvailable(idx),
+    UnreviewedDiffLines(idx, n), ReviewDiffThreshold(t), n > t.
+// Transcript fallback: a large single edit unreviewed since it was made.
+LargeUnreviewedEdit(idx) :- IsPush(idx), !ReviewDiffAvailable(idx),
+    EditSize(e, n), ReviewEditThreshold(t), n > t, !ReviewedEdit(e).
 
 // @ask
 // @deny_message: Pushing substantial code edits not reviewed since they were made (large changes — incl. audit-suggested fixes — need a (re-)review)
-// @suggestion: Run a code-review subagent or /review skill on the latest changes, or approve to push without one
-Unauthorized(idx) :- RuleEnabled("review_gate"), IsPush(idx), LargeUnreviewedEdit().
+// @suggestion: Run a code-review subagent or /review skill on the latest changes, then retry the push
+Unauthorized(idx) :- RuleEnabled("review_gate"), IsPush(idx), LargeUnreviewedEdit(idx).
 
 /* ── 11. Supply-chain cooldown (Tier-0 deny + Tier-1 @ask) ──────────────
    Gates dependency installs on daemon-resolved per-action metadata: the daemon
@@ -613,3 +807,54 @@ UncoveredDependencyEdit() :- DependencyEdit(e), !OsvCoveredEdit(e).
 // @deny_message: Dependency files changed without a clean osv-scanner run — possible vulnerable/known-bad dependencies
 // @suggestion: Run `osv-scanner` over the project (or the changed manifests) until clean, then push; or approve to push anyway
 Unauthorized(idx) :- RuleEnabled("dep_scan"), IsPush(idx), UncoveredDependencyEdit().
+
+/* ── Reaches definition (sink-rooted; see the .decl near the top) ──────────
+   Every consumer queries Reaches(<edit|scan>, <sink>) where the sink is a
+   scan/review node (GitleaksRun/GitleaksClean/ReviewArtifact/OsvClean) — a handful
+   per session. Computing reachability BACKWARD from those sinks (rather than the old
+   all-pairs closure from every node) yields the identical (src,dst) pairs the
+   consumers need at O(|sinks|·n) ≈ O(n) instead of O(n²). Placed here so every sink
+   relation above is already declared. */
+.decl ReachSink(n: symbol)
+ReachSink(s) :- GitleaksRun(s).
+ReachSink(s) :- GitleaksClean(s).
+ReachSink(r) :- ReviewArtifact(r).
+ReachSink(s) :- OsvClean(s).
+
+// Relevance gate (mirrors common_policy's *PolicyRelevant pattern): Reaches is
+// consumed ONLY by secret_scan / review_gate / dep_scan, all of which fire only on
+// IsPush. So for every NON-push action — the vast majority of checks — skip the
+// closure entirely. Add to this predicate if a non-push rule ever consumes Reaches.
+.decl ReachesRelevant()
+ReachesRelevant() :- IsPush(_).
+Reaches(src, dst) :- ReachesRelevant(), ReachSink(dst), Edge(src, dst).
+Reaches(src, dst) :- Edge(src, mid), Reaches(mid, dst).
+
+/* ── Gate CurrentDepends (O(n) backward dependency traversal) on relevance ──────
+   CurrentDepends — and InContext / RecentEdit built on it — is consumed ONLY by:
+     · the hidden-unicode taint gate      → needs a HiddenUnicodeSource
+     · exfil (UntrustedInContext)         → needs an untrusted WebFetch/WebSearch/
+                                            RemoteAgent result
+     · toxic_flow (SensitiveInContext)    → needs a sensitive read in the session
+     · the push gates secret_scan/review/dep_scan (RecentEdit / GitleaksRun /
+       ReviewArtifact / OSV)              → needs IsPush
+   So a benign non-push action with none of those present — the common case — can
+   skip the whole backward traversal. Each condition is a CHEAP existence check over
+   base facts (no CurrentDepends → no circularity), and each is a SUPERSET of the
+   InContext-joined need, so the gate never drops a real detection (fail-safe).
+   Defining rules for CurrentDependsPolicyRelevant here suppresses sugar.py's
+   trivially-true default (it scopes the check to user-policy lines). */
+.decl UntrustedResultExists()
+UntrustedResultExists() :- ToolResult(_, "WebFetch", _).
+UntrustedResultExists() :- ToolResult(_, "WebSearch", _).
+UntrustedResultExists() :- ToolResult(_, "RemoteAgent", _).
+.decl SensitiveReadExists()
+SensitiveReadExists() :- ToolResult(_, "Read", args),
+    p = @json_get_str(args, "file_path"), SensitivePath(s), @str_contains(p, s) = 1.
+SensitiveReadExists() :- ToolResult(_, "Bash", args),
+    cmd = @json_get_str(args, "command"), n = @normalize_cmd(cmd),
+    SensitiveReadVerb(v), @str_contains(n, v) = 1, SensitivePath(s), @str_contains(n, s) = 1.
+CurrentDependsPolicyRelevant() :- HiddenUnicodeSource(_).
+CurrentDependsPolicyRelevant() :- UntrustedResultExists().
+CurrentDependsPolicyRelevant() :- SensitiveReadExists().
+CurrentDependsPolicyRelevant() :- IsPush(_).
